@@ -25,12 +25,61 @@ const styles = {
 };
 
 export default function AdminApp() {
+  const [isLoggedIn, setIsLoggedIn] = useState(false); // 登入狀態
+  const [password, setPassword] = useState(""); // 密碼輸入值
   const [activeTab, setActiveTab] = useState('orders');
   const [orders, setOrders] = useState([]);
   const [menuItems, setMenuItems] = useState([]);
   const [prevOrderCount, setPrevOrderCount] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
 
+  const handleLogin = (e) => {
+    e.preventDefault();
+    if (password === "20250909") {
+      setIsLoggedIn(true);
+    } else {
+      alert("密碼錯誤，請重新輸入！");
+      setPassword("");
+    }
+  };
+
+  // 如果尚未登入，顯示登入畫面
+  if (!isLoggedIn) {
+    return (
+      <div style={{ 
+        height: '100vh', display: 'flex', justifyContent: 'center', 
+        alignItems: 'center', backgroundColor: '#001529' 
+      }}>
+        <div style={{ 
+          backgroundColor: '#fff', padding: '40px', borderRadius: '12px', 
+          width: '320px', textAlign: 'center', boxShadow: '0 8px 24px rgba(0,0,0,0.2)' 
+        }}>
+          <h2 style={{ color: '#001529', marginBottom: '20px' }}>🥘 韓館管理系統</h2>
+          <form onSubmit={handleLogin}>
+            <input 
+              type="password" 
+              placeholder="請輸入管理員密碼" 
+              style={{ ...styles.input, textAlign: 'center', fontSize: '18px' }}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoFocus
+            />
+            <button type="submit" style={{ ...styles.btnPrimary, width: '100%', marginTop: '10px' }}>
+              登入後台
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  // --- 如果已登入，顯示原本的 return 內容 ---
+  return (
+    <div style={styles.layout}>
+      {/* ... 原本的側邊欄與內容 ... */}
+    </div>
+  );
+}
   // 🔊 播放音效函式
   const playNotification = () => {
     if (isMuted) return;
@@ -98,7 +147,7 @@ export default function AdminApp() {
       </div>
     </div>
   );
-}
+
 
 // --- 分頁元件 1：訂單管理 ---
 function OrdersView({ orders }) {
