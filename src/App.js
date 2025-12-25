@@ -144,6 +144,12 @@ export default function AdminApp() {
         {activeTab === 'analytics' && <AnalyticsView orders={orders} />}
         {activeTab === 'tables' && <TableManager />}
         {activeTab === 'history' && <HistoryView orders={orders} />}
+      <div 
+  style={{ ...styles.menuItem(false), color: '#ff4d4f', borderTop: '1px solid #333' }} 
+  onClick={() => setIsLoggedIn(false)}
+>
+  🚪 安全登出
+</div>
       </div>
     </div>
   );
