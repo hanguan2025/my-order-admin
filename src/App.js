@@ -1,39 +1,99 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { db } from './firebase';
 import { 
   collection, onSnapshot, query, orderBy, 
   updateDoc, doc, deleteDoc, addDoc, serverTimestamp 
 } from 'firebase/firestore';
 
-// --- CSS 動效注入 ---
+// --- 進階 CSS 動效與美化樣式 ---
 const injectStyles = `
-  @keyframes alertBlink {
-    0% { border-color: #ff4d4f; box-shadow: 0 0 15px rgba(255, 77, 79, 0.4); }
-    50% { border-color: transparent; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
-    100% { border-color: #ff4d4f; box-shadow: 0 0 15px rgba(255, 77, 79, 0.4); }
+  :root {
+    --primary: #1890ff;
+    --success: #52c41a;
+    --warning: #faad14;
+    --danger: #ff4d4f;
+    --dark: #001529;
+    --bg: #f4f7fe;
   }
-  .order-overtime { animation: alertBlink 1.5s infinite ease-in-out !important; border: 2px solid #ff4d4f !important; }
-  .admin-section-title { border-left: 5px solid #1890ff; padding-left: 10px; margin: 30px 0 15px; font-size: 1.2rem; display: flex; justify-content: space-between; align-items: center; font-weight: bold; }
-  .menu-edit-input { border: 1px solid transparent; border-bottom: 1px solid #eee; transition: 0.3s; padding: 5px 0; background: transparent; width: 100%; }
-  .menu-edit-input:focus { border-bottom: 1px solid #1890ff; outline: none; background-color: #f9f9f9; }
-  .order-card-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding-bottom: 10px; margin-bottom: 10px; }
-  .item-row { padding: 6px 0; border-bottom: 1px dashed #eee; font-size: 15px; }
-  .item-row:last-child { border-bottom: none; }
+
+  @keyframes pulseRed {
+    0% { box-shadow: 0 0 0 0 rgba(255, 77, 79, 0.4); }
+    70% { box-shadow: 0 0 0 10px rgba(255, 77, 79, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(255, 77, 79, 0); }
+  }
+
+  body { background-color: var(--bg); margin: 0; font-family: "PingFang TC", "Microsoft JhengHei", sans-serif; }
+  
+  .glass-card {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    box-shadow: 0 8px 32px rgba(31, 38, 135, 0.07);
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+  
+  .glass-card:hover { transform: translateY(-4px); box-shadow: 0 12px 40px rgba(31, 38, 135, 0.12); }
+
+  .order-pending { border-left: 6px solid var(--danger) !important; animation: pulseRed 2s infinite; }
+  .order-processing { border-left: 6px solid var(--warning) !important; }
+  .order-completed { border-left: 6px solid var(--success) !important; opacity: 0.8; }
+
+  .admin-section-title { 
+    font-size: 1.4rem; font-weight: 800; color: var(--dark);
+    margin: 40px 0 20px; display: flex; align-items: center; justify-content: space-between;
+  }
+
+  .menu-edit-input { 
+    border: 1px solid transparent; border-bottom: 2px solid #eee; 
+    transition: 0.3s; padding: 8px 4px; background: transparent; width: 100%; font-size: 1rem;
+  }
+  .menu-edit-input:focus { border-bottom: 2px solid var(--primary); outline: none; background: #f0f7ff; }
+
+  .toggle-pill {
+    display: flex; align-items: center; gap: 6px; padding: 6px 12px;
+    border-radius: 20px; font-size: 12px; font-weight: 600; cursor: pointer;
+    transition: 0.3s; border: 1.5px solid #eee; background: #fff; color: #888;
+  }
+  .toggle-pill.active { background: #e6f7ff; color: var(--primary); border-color: var(--primary); }
+
+  .category-header {
+    background: linear-gradient(135deg, var(--dark) 0%, #2b4162 100%);
+    color: white; padding: 12px 24px; border-radius: 12px; margin-bottom: 20px;
+    display: inline-flex; align-items: center; gap: 10px; font-weight: 600;
+  }
+
+  .btn-gradient {
+    background: linear-gradient(135deg, #1890ff 0%, #096dd9 100%);
+    color: white; border: none; padding: 10px 24px; border-radius: 8px;
+    font-weight: 600; cursor: pointer; box-shadow: 0 4px 14px rgba(24, 144, 255, 0.3);
+    transition: 0.3s; display: inline-block; text-align: center;
+  }
+  .btn-gradient:active { transform: scale(0.95); }
 `;
 
 const styles = {
-  layout: { minHeight: '100vh', backgroundColor: '#f0f2f5', fontFamily: '"PingFang TC", sans-serif', position: 'relative' },
-  main: { padding: '80px 20px 30px 20px', maxWidth: '1200px', margin: '0 auto' },
-  hamburgerBtn: { position: 'fixed', top: '20px', right: '20px', zIndex: 1001, width: '45px', height: '45px', backgroundColor: '#001529', color: '#fff', borderRadius: '8px', border: 'none', cursor: 'pointer', fontSize: '24px', display: 'flex', justifyContent: 'center', alignItems: 'center' },
-  dropdownMenu: (isOpen) => ({ position: 'fixed', top: isOpen ? '75px' : '-500px', right: '20px', width: '220px', backgroundColor: '#001529', color: '#fff', zIndex: 1000, transition: '0.4s cubic-bezier(0.4, 0, 0.2, 1)', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 4px 20px rgba(0,0,0,0.3)', display: 'flex', flexDirection: 'column' }),
-  overlay: (isOpen) => ({ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 999, display: isOpen ? 'block' : 'none' }),
-  menuItem: (active) => ({ padding: '16px 20px', cursor: 'pointer', backgroundColor: active ? '#1890ff' : 'transparent', transition: '0.2s', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '15px' }),
-  card: { backgroundColor: '#fff', borderRadius: '12px', padding: '20px', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', marginBottom: '20px', border: '2px solid transparent' },
-  input: { padding: '10px', borderRadius: '6px', border: '1px solid #d9d9d9', width: '100%', marginBottom: '10px', boxSizing: 'border-box' },
-  grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: '20px' },
-  btnPrimary: { backgroundColor: '#1890ff', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '6px', cursor: 'pointer', fontWeight: 'bold' },
-  btnDanger: { backgroundColor: '#ff4d4f', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: '6px', cursor: 'pointer' },
-  statusTab: (active, color) => ({ flex: 1, padding: '15px 10px', borderRadius: '10px', cursor: 'pointer', textAlign: 'center', backgroundColor: active ? color : '#fff', color: active ? '#fff' : '#555', fontWeight: 'bold', transition: '0.3s', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' })
+  layout: { minHeight: '100vh' },
+  main: { padding: '100px 24px 60px', maxWidth: '1240px', margin: '0 auto' },
+  topNav: { 
+    position: 'fixed', top: 0, left: 0, right: 0, height: '70px', 
+    backgroundColor: 'rgba(255,255,255,0.8)', backdropFilter: 'blur(10px)',
+    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+    padding: '0 30px', zIndex: 1000, borderBottom: '1px solid #eee' 
+  },
+  hamburgerBtn: { width: '45px', height: '45px', backgroundColor: '#001529', color: '#fff', borderRadius: '10px', border: 'none', cursor: 'pointer', fontSize: '20px' },
+  dropdownMenu: (isOpen) => ({ 
+    position: 'fixed', top: isOpen ? '80px' : '-500px', right: '30px', width: '240px', 
+    backgroundColor: '#001529', color: '#fff', zIndex: 1000, transition: '0.4s cubic-bezier(0.4, 0, 0.2, 1)', 
+    borderRadius: '16px', overflow: 'hidden', boxShadow: '0 10px 30px rgba(0,0,0,0.2)' 
+  }),
+  menuItem: (active) => ({ padding: '18px 24px', cursor: 'pointer', backgroundColor: active ? '#1890ff' : 'transparent', display: 'flex', alignItems: 'center', gap: '12px', transition: '0.2s' }),
+  grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '24px' },
+  statusTab: (active, color) => ({ 
+    flex: 1, padding: '16px', borderRadius: '14px', cursor: 'pointer', textAlign: 'center', 
+    backgroundColor: active ? color : '#fff', color: active ? '#fff' : '#555', 
+    fontWeight: '700', transition: '0.3s', boxShadow: active ? '0 8px 20px rgba(0,0,0,0.1)' : 'none' 
+  })
 };
 
 export default function AdminApp() {
@@ -41,21 +101,33 @@ export default function AdminApp() {
   const [password, setPassword] = useState("");
   const [activeTab, setActiveTab] = useState('orders');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  
   const [orders, setOrders] = useState([]);
   const [menuItems, setMenuItems] = useState([]);
   const [mains, setMains] = useState([]);
   const [extras, setExtras] = useState([]);
+  
+  // 修正音效引用與靜音策略
+  const audioRef = useRef(null);
 
   useEffect(() => {
     const styleTag = document.createElement("style");
     styleTag.innerHTML = injectStyles;
     document.head.appendChild(styleTag);
+    audioRef.current = new Audio("https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3");
   }, []);
 
   useEffect(() => {
     if (!isLoggedIn) return;
-    const unsubOrders = onSnapshot(query(collection(db, "orders"), orderBy("createdAt", "desc")), (s) => setOrders(s.docs.map(d => ({...d.data(), id: d.id}))));
+    
+    const unsubOrders = onSnapshot(query(collection(db, "orders"), orderBy("createdAt", "desc")), (s) => {
+      s.docChanges().forEach(change => {
+        if (change.type === "added" && change.doc.data().status === "待處理") {
+          audioRef.current?.play().catch(() => console.log("等待使用者互動以播放音效"));
+        }
+      });
+      setOrders(s.docs.map(d => ({...d.data(), id: d.id})));
+    });
+
     const unsubMenu = onSnapshot(query(collection(db, "menu"), orderBy("category", "asc")), (s) => setMenuItems(s.docs.map(d => ({...d.data(), id: d.id}))));
     const unsubMains = onSnapshot(collection(db, "mains"), (s) => setMains(s.docs.map(d => ({...d.data(), id: d.id}))));
     const unsubExtras = onSnapshot(collection(db, "extras"), (s) => setExtras(s.docs.map(d => ({...d.data(), id: d.id}))));
@@ -65,16 +137,24 @@ export default function AdminApp() {
 
   const handleLogin = () => {
     if (password === "20250909") setIsLoggedIn(true);
-    else alert("密碼錯誤！");
+    else alert("密碼錯誤");
   };
 
   if (!isLoggedIn) {
     return (
-      <div style={{ height: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', backgroundColor: '#001529' }}>
-        <div style={{ backgroundColor: '#fff', padding: '40px', borderRadius: '12px', textAlign: 'center', width: '300px' }}>
-          <h2 style={{marginBottom: '20px'}}>🥘 韓館管理登入</h2>
-          <input type="password" placeholder="管理員密碼" style={styles.input} value={password} onChange={(e) => setPassword(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && handleLogin()} />
-          <button onClick={handleLogin} style={{...styles.btnPrimary, width: '100%'}}>登入</button>
+      <div style={{ height: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', background: 'linear-gradient(135deg, #001529 0%, #003a8c 100%)' }}>
+        <div className="glass-card" style={{ padding: '50px', textAlign: 'center', width: '320px' }}>
+          <h2 style={{ margin: '0 0 30px', color: '#001529' }}>🥘 韓館管理系統</h2>
+          <input 
+            type="password" 
+            placeholder="管理員密碼" 
+            className="menu-edit-input" 
+            style={{ marginBottom: '30px', textAlign: 'center' }} 
+            value={password} 
+            onChange={(e) => setPassword(e.target.value)} 
+            onKeyPress={(e) => e.key === 'Enter' && handleLogin()} 
+          />
+          <button className="btn-gradient" style={{ width: '100%' }} onClick={handleLogin}>立即登入</button>
         </div>
       </div>
     );
@@ -82,99 +162,78 @@ export default function AdminApp() {
 
   return (
     <div style={styles.layout}>
-      <button style={styles.hamburgerBtn} onClick={() => setIsMenuOpen(!isMenuOpen)}>☰</button>
-      <div style={styles.overlay(isMenuOpen)} onClick={() => setIsMenuOpen(false)}></div>
+      <header style={styles.topNav}>
+        <div style={{ fontSize: '1.4rem', fontWeight: '900', color: '#001529' }}>K-FOOD <span style={{ color: '#1890ff' }}>ADMIN</span></div>
+        <button style={styles.hamburgerBtn} onClick={() => setIsMenuOpen(!isMenuOpen)}>☰</button>
+      </header>
+
+      {isMenuOpen && <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 999 }} onClick={() => setIsMenuOpen(false)}></div>}
+      
       <div style={styles.dropdownMenu(isMenuOpen)}>
-        <div style={styles.menuItem(activeTab === 'orders')} onClick={() => {setActiveTab('orders'); setIsMenuOpen(false);}}>📋 即時訂單</div>
-        <div style={styles.menuItem(activeTab === 'menu_all')} onClick={() => {setActiveTab('menu_all'); setIsMenuOpen(false);}}>🍴 菜單/分類管理</div>
-        <div style={styles.menuItem(activeTab === 'analytics')} onClick={() => {setActiveTab('analytics'); setIsMenuOpen(false);}}>📊 營業統計</div>
-        <div style={{ padding: '20px', color: '#ff4d4f', cursor: 'pointer', borderTop: '1px solid rgba(255,255,255,0.1)' }} onClick={() => setIsLoggedIn(false)}>🚪 登出系統</div>
+        <div style={styles.menuItem(activeTab === 'orders')} onClick={() => {setActiveTab('orders'); setIsMenuOpen(false);}}>📋 訂單監控</div>
+        <div style={styles.menuItem(activeTab === 'menu_all')} onClick={() => {setActiveTab('menu_all'); setIsMenuOpen(false);}}>🍴 菜單管理</div>
+        <div style={styles.menuItem(activeTab === 'analytics')} onClick={() => {setActiveTab('analytics'); setIsMenuOpen(false);}}>📊 銷售統計</div>
+        <div style={{ ...styles.menuItem(false), color: '#ff4d4f', borderTop: '1px solid #333' }} onClick={() => setIsLoggedIn(false)}>🚪 登出系統</div>
       </div>
 
-      <div style={styles.main}>
+      <main style={styles.main}>
         {activeTab === 'orders' && <OrdersView orders={orders} />}
         {activeTab === 'menu_all' && (
           <>
             <MenuView menuItems={menuItems} />
-            <DynamicConfigView title="🍚 主食選項管理" collectionName="mains" data={mains} placeholder="例如：冬粉、泡麵" />
-            <DynamicConfigView title="🥩 加料選項管理" collectionName="extras" data={extras} hasPrice={true} placeholder="例如：起司、豬肉" />
+            <DynamicConfigView title="🍚 主食庫存選項" collectionName="mains" data={mains} placeholder="名稱" />
+            <DynamicConfigView title="🥩 加料庫存選項" collectionName="extras" data={extras} hasPrice={true} placeholder="名稱" />
           </>
         )}
         {activeTab === 'analytics' && <AnalyticsView orders={orders} />}
-      </div>
+      </main>
     </div>
   );
 }
 
-// --- 訂單視圖：復原原本的閃爍與詳細清單 ---
+// --- 訂單監控視圖 ---
 function OrdersView({ orders }) {
-  const [filterStatus, setFilterStatus] = useState('待處理');
-  const [now, setNow] = useState(new Date());
-
-  useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), 30000);
-    return () => clearInterval(timer);
-  }, []);
-
+  const [filter, setFilter] = useState('待處理');
   const updateStatus = async (id, status) => await updateDoc(doc(db, "orders", id), { status });
 
   return (
     <div>
-      <div style={{display:'flex', gap:'10px', marginBottom:'20px'}}>
-        <div style={styles.statusTab(filterStatus === '待處理', '#ff4d4f')} onClick={() => setFilterStatus('待處理')}>待處理 ({orders.filter(o => o.status === '待處理').length})</div>
-        <div style={styles.statusTab(filterStatus === '處理中', '#faad14')} onClick={() => setFilterStatus('處理中')}>處理中 ({orders.filter(o => o.status === '處理中').length})</div>
-        <div style={styles.statusTab(filterStatus === '已完成', '#52c41a')} onClick={() => setFilterStatus('已完成')}>已完成 ({orders.filter(o => o.status === '已完成').length})</div>
+      <div style={{ display: 'flex', gap: '15px', marginBottom: '30px' }}>
+        {['待處理', '處理中', '已完成'].map(s => (
+          <div key={s} style={styles.statusTab(filter === s, s === '待處理' ? '#ff4d4f' : s === '處理中' ? '#faad14' : '#52c41a')} onClick={() => setFilter(s)}>
+            {s} · {orders.filter(o => o.status === s).length}
+          </div>
+        ))}
       </div>
-
       <div style={styles.grid}>
-        {orders.filter(o => o.status === filterStatus).map(order => {
-          const orderTime = order.createdAt?.toDate ? order.createdAt.toDate() : null;
-          const isOvertime = filterStatus === '待處理' && orderTime && (now - orderTime > 300000); // 5分鐘未接單閃爍
-
-          return (
-            <div key={order.id} style={styles.card} className={isOvertime ? 'order-overtime' : ''}>
-              <div className="order-card-header">
-                <span style={{ fontSize: '1.4rem', fontWeight: '900' }}>🪑 桌號：{order.tableNum}</span>
-                <span style={{ color: '#888', fontSize: '13px' }}>{orderTime ? orderTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '剛剛'}</span>
-              </div>
-              
-              <div style={{ marginBottom: '10px', fontSize: '14px', color: '#555' }}>
-                👤 {order.customerName} | 📞 {order.phone}
-              </div>
-
-              <div style={{ background: '#f9f9f9', padding: '12px', borderRadius: '8px', marginBottom: '12px' }}>
-                {order.items?.map((it, i) => (
-                  <div key={i} className="item-row">
-                    <div style={{ fontWeight: 'bold' }}>{it.emoji} {it.name} <span style={{color:'#1890ff'}}>x1</span></div>
-                    <div style={{ fontSize: '12px', color: '#666' }}>
-                      🍜 主食：{it.main} 
-                      {it.extras?.length > 0 && ` | ➕ 加料：${it.extras.map(e => e.name).join(', ')}`}
-                    </div>
-                  </div>
-                ))}
-                {order.note && (
-                  <div style={{ marginTop: '10px', padding: '8px', background: '#fffbe6', borderRadius: '4px', border: '1px solid #ffe58f', fontSize: '13px', color: '#d46b08' }}>
-                    📝 備註：{order.note}
-                  </div>
-                )}
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontWeight: 'bold', color: '#f27a45', fontSize: '1.2rem' }}>NT$ {order.totalAmount}</span>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  {filterStatus === '待處理' && <button onClick={() => updateStatus(order.id, '處理中')} style={styles.btnPrimary}>接單製作</button>}
-                  {filterStatus === '處理中' && (
-                    <>
-                      <button onClick={() => updateStatus(order.id, '待處理')} style={{...styles.btnPrimary, backgroundColor:'#888'}}>退回</button>
-                      <button onClick={() => updateStatus(order.id, '已完成')} style={{...styles.btnPrimary, backgroundColor:'#52c41a'}}>完成出餐</button>
-                    </>
-                  )}
-                  {filterStatus === '已完成' && <button onClick={() => updateStatus(order.id, '處理中')} style={{...styles.btnPrimary, backgroundColor:'#faad14'}}>重啟訂單</button>}
-                </div>
-              </div>
+        {orders.filter(o => o.status === filter).map(order => (
+          <div key={order.id} className={`glass-card ${filter === '待處理' ? 'order-pending' : filter === '處理中' ? 'order-processing' : 'order-completed'}`} style={{ padding: '24px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px' }}>
+              <span style={{ fontSize: '1.4rem', fontWeight: '800' }}>🪑 桌號：{order.tableNum}</span>
+              <span style={{ fontSize: '13px', color: '#999' }}>
+                {order.createdAt ? order.createdAt.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "讀取中..."}
+              </span>
             </div>
-          );
-        })}
+            <div style={{ background: '#f8f9fa', padding: '15px', borderRadius: '12px', marginBottom: '20px' }}>
+              {order.items?.map((it, i) => (
+                <div key={i} style={{ padding: '8px 0', borderBottom: i === order.items.length - 1 ? 'none' : '1px dashed #ddd' }}>
+                  <div style={{ fontWeight: '700' }}>{it.emoji} {it.name}</div>
+                  <div style={{ fontSize: '12px', color: '#777', marginTop: '4px' }}>
+                    🍜 {it.main || '無'} | ➕ {it.extras?.map(e => e.name).join(', ') || '無'}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ color: '#f27a45', fontWeight: '900', fontSize: '1.4rem' }}>NT$ {order.totalAmount}</span>
+              <button className="btn-gradient" 
+                style={{ background: filter === '待處理' ? '#ff4d4f' : filter === '處理中' ? '#52c41a' : '#1890ff' }}
+                onClick={() => updateStatus(order.id, filter === '待處理' ? '處理中' : '已完成')}>
+                {filter === '待處理' ? '接單製作' : filter === '處理中' ? '出餐完成' : '歸檔'}
+              </button>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -183,62 +242,80 @@ function OrdersView({ orders }) {
 // --- 菜單管理 ---
 function MenuView({ menuItems }) {
   const [isAdding, setIsAdding] = useState(false);
-  const [newItem, setNewItem] = useState({ name: '', price: '', emoji: '🍲', category: '經典鍋物', desc: '' });
+  const [newItem, setNewItem] = useState({ name: '', price: '', emoji: '🍲', category: '經典鍋物', allowMain: true, allowExtras: true });
 
   const add = async () => {
-    if (!newItem.name || !newItem.price) return alert("請填寫名稱與價格");
+    if (!newItem.name || !newItem.price) return alert("資訊不完整");
     await addDoc(collection(db, "menu"), { ...newItem, price: Number(newItem.price), createdAt: serverTimestamp() });
     setIsAdding(false);
-    setNewItem({ name: '', price: '', emoji: '🍲', category: '經典鍋物', desc: '' });
+    setNewItem({ name: '', price: '', emoji: '🍲', category: '經典鍋物', allowMain: true, allowExtras: true });
   };
 
-  const update = async (id, field, val) => await updateDoc(doc(db, "menu", id), { [field]: field === 'price' ? Number(val) : val });
+  const update = async (id, field, val) => await updateDoc(doc(db, "menu", id), { [field]: val });
+
+  const grouped = menuItems.reduce((acc, it) => {
+    const c = it.category || "未分類";
+    if (!acc[c]) acc[c] = [];
+    acc[c].push(it);
+    return acc;
+  }, {});
 
   return (
     <div>
       <div className="admin-section-title">
-        <span>🥘 餐點管理 (雲端同步)</span>
-        <button onClick={() => setIsAdding(!isAdding)} style={styles.btnPrimary}>{isAdding ? '取消' : '＋ 新增餐點'}</button>
+        <span>🥘 菜單與分類配置</span>
+        <button className="btn-gradient" onClick={() => setIsAdding(!isAdding)}>{isAdding ? '關閉' : '＋ 新增餐點'}</button>
       </div>
 
       {isAdding && (
-        <div style={{...styles.card, border:'2px dashed #1890ff', background: '#f0faff'}}>
-          <input placeholder="分類 (如：經典鍋物、飲品)" style={styles.input} value={newItem.category} onChange={e => setNewItem({...newItem, category: e.target.value})} />
-          <div style={{display:'flex', gap:'10px'}}>
-            <input placeholder="圖示" style={{...styles.input, width:'60px'}} value={newItem.emoji} onChange={e => setNewItem({...newItem, emoji: e.target.value})} />
-            <input placeholder="餐點名稱" style={styles.input} value={newItem.name} onChange={e => setNewItem({...newItem, name: e.target.value})} />
-            <input placeholder="價格" type="number" style={styles.input} value={newItem.price} onChange={e => setNewItem({...newItem, price: e.target.value})} />
+        <div className="glass-card" style={{ padding: '30px', marginBottom: '30px', border: '2px dashed #1890ff' }}>
+          <input placeholder="分類名稱" className="menu-edit-input" style={{ marginBottom: '20px' }} value={newItem.category} onChange={e => setNewItem({...newItem, category: e.target.value})} />
+          <div style={{ display: 'flex', gap: '15px', marginBottom: '20px' }}>
+            <input placeholder="圖示" className="menu-edit-input" style={{ width: '80px' }} value={newItem.emoji} onChange={e => setNewItem({...newItem, emoji: e.target.value})} />
+            <input placeholder="餐點名稱" className="menu-edit-input" value={newItem.name} onChange={e => setNewItem({...newItem, name: e.target.value})} />
+            <input placeholder="價格" type="number" className="menu-edit-input" style={{ width: '120px' }} value={newItem.price} onChange={e => setNewItem({...newItem, price: e.target.value})} />
           </div>
-          <input placeholder="簡短描述" style={styles.input} value={newItem.desc} onChange={e => setNewItem({...newItem, desc: e.target.value})} />
-          <button onClick={add} style={{...styles.btnPrimary, width:'100%'}}>儲存餐點</button>
+          <div style={{ display: 'flex', gap: '20px', marginBottom: '25px' }}>
+            <div className={`toggle-pill ${newItem.allowMain ? 'active' : ''}`} onClick={() => setNewItem({...newItem, allowMain: !newItem.allowMain})}>主食選擇 {newItem.allowMain ? 'ON' : 'OFF'}</div>
+            <div className={`toggle-pill ${newItem.allowExtras ? 'active' : ''}`} onClick={() => setNewItem({...newItem, allowExtras: !newItem.allowExtras})}>加料選項 {newItem.allowExtras ? 'ON' : 'OFF'}</div>
+          </div>
+          <button className="btn-gradient" style={{ width: '100%' }} onClick={add}>確認新增餐點</button>
         </div>
       )}
 
-      <div style={styles.grid}>
-        {menuItems.map(item => (
-          <div key={item.id} style={styles.card}>
-            <div style={{fontSize:'12px', color:'#1890ff', marginBottom:'5px'}}>分類：<input className="menu-edit-input" style={{width:'100px'}} value={item.category} onChange={e => update(item.id, 'category', e.target.value)} /></div>
-            <div style={{display:'flex', gap:'10px', margin:'10px 0'}}>
-              <input className="menu-edit-input" style={{width:'30px', fontSize: '1.2rem'}} value={item.emoji} onChange={e => update(item.id, 'emoji', e.target.value)} />
-              <input className="menu-edit-input" style={{fontWeight:'bold', fontSize: '1.1rem'}} value={item.name} onChange={e => update(item.id, 'name', e.target.value)} />
-            </div>
-            <div style={{display:'flex', alignItems:'center', gap: '5px'}}>
-              <span style={{fontSize:'14px', color:'#888'}}>價格:</span>
-              <input className="menu-edit-input" style={{color:'#f27a45', fontWeight:'bold'}} type="number" value={item.price} onChange={e => update(item.id, 'price', e.target.value)} />
-            </div>
-            <button onClick={async () => window.confirm(`確定刪除 ${item.name}？`) && await deleteDoc(doc(db, "menu", item.id))} style={{...styles.btnDanger, width:'100%', marginTop:'15px', padding:'6px', fontSize:'13px'}}>刪除項目</button>
+      {Object.keys(grouped).map(cat => (
+        <div key={cat} style={{ marginBottom: '50px' }}>
+          <div className="category-header">📂 {cat}</div>
+          <div style={styles.grid}>
+            {grouped[cat].map(item => (
+              <div key={item.id} className="glass-card" style={{ padding: '24px' }}>
+                <div style={{ display: 'flex', gap: '12px', marginBottom: '15px' }}>
+                  <input className="menu-edit-input" style={{ width: '40px', textAlign: 'center' }} value={item.emoji} onChange={e => update(item.id, 'emoji', e.target.value)} />
+                  <input className="menu-edit-input" style={{ fontWeight: '700' }} value={item.name} onChange={e => update(item.id, 'name', e.target.value)} />
+                </div>
+                <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
+                  <div className={`toggle-pill ${item.allowMain ? 'active' : ''}`} onClick={() => update(item.id, 'allowMain', !item.allowMain)}>主食</div>
+                  <div className={`toggle-pill ${item.allowExtras ? 'active' : ''}`} onClick={() => update(item.id, 'allowExtras', !item.allowExtras)}>加料</div>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontWeight: '700', color: '#f27a45' }}>$ <input className="menu-edit-input" style={{ width: '60px', borderBottom: 'none' }} type="number" value={item.price} onChange={e => update(item.id, 'price', Number(e.target.value))} /></span>
+                  <button onClick={() => window.confirm('確定下架？') && deleteDoc(doc(db, "menu", item.id))} style={{ color: '#ff4d4f', border: 'none', background: 'none', cursor: 'pointer', fontWeight: '600' }}>下架</button>
+                </div>
+                <input className="menu-edit-input" style={{ fontSize: '11px', color: '#aaa', marginTop: '10px' }} value={item.category} onChange={e => update(item.id, 'category', e.target.value)} />
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+        </div>
+      ))}
     </div>
   );
 }
 
-// --- 通用動態配置 (主食/加料) ---
+// --- 通用配置 (主食/加料) ---
 function DynamicConfigView({ title, collectionName, data, hasPrice = false, placeholder }) {
   const [isAdding, setIsAdding] = useState(false);
   const [newItem, setNewItem] = useState({ name: '', price: 0, icon: '✨' });
-
+  
   const add = async () => {
     if (!newItem.name) return;
     await addDoc(collection(db, collectionName), newItem);
@@ -246,33 +323,28 @@ function DynamicConfigView({ title, collectionName, data, hasPrice = false, plac
     setIsAdding(false);
   };
 
-  const update = async (id, field, val) => await updateDoc(doc(db, collectionName, id), { [field]: field === 'price' ? Number(val) : val });
-
   return (
-    <div style={{marginTop:'40px'}}>
+    <div style={{ marginTop: '50px' }}>
       <div className="admin-section-title">
         <span>{title}</span>
-        <button onClick={() => setIsAdding(!isAdding)} style={{...styles.btnPrimary, backgroundColor:'#52c41a'}}>{isAdding ? '取消' : '＋ 新增'}</button>
+        <button className="btn-gradient" style={{ background: '#52c41a' }} onClick={() => setIsAdding(!isAdding)}>{isAdding ? '取消' : '＋ 新增'}</button>
       </div>
-
       {isAdding && (
-        <div style={{...styles.card, border:'2px dashed #52c41a', background: '#f6ffed'}}>
-          <div style={{display:'flex', gap:'10px'}}>
-            <input placeholder="圖示" style={{...styles.input, width:'60px'}} value={newItem.icon} onChange={e => setNewItem({...newItem, icon: e.target.value})} />
-            <input placeholder={placeholder} style={styles.input} value={newItem.name} onChange={e => setNewItem({...newItem, name: e.target.value})} />
-            {hasPrice && <input placeholder="價格" type="number" style={styles.input} value={newItem.price} onChange={e => setNewItem({...newItem, price: e.target.value})} />}
+        <div className="glass-card" style={{ padding: '24px', marginBottom: '24px' }}>
+          <div style={{ display: 'flex', gap: '15px' }}>
+            <input placeholder="圖" className="menu-edit-input" style={{ width: '60px' }} value={newItem.icon} onChange={e => setNewItem({...newItem, icon: e.target.value})} />
+            <input placeholder={placeholder} className="menu-edit-input" value={newItem.name} onChange={e => setNewItem({...newItem, name: e.target.value})} />
+            {hasPrice && <input placeholder="價格" type="number" className="menu-edit-input" style={{ width: '100px' }} onChange={e => setNewItem({...newItem, price: Number(e.target.value)})} />}
           </div>
-          <button onClick={add} style={{...styles.btnPrimary, backgroundColor:'#52c41a', width:'100%'}}>確認新增</button>
+          <button className="btn-gradient" style={{ background: '#52c41a', width: '100%', marginTop: '20px' }} onClick={add}>確認新增</button>
         </div>
       )}
-
-      <div style={{display:'flex', flexWrap:'wrap', gap:'10px'}}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
         {data.map(item => (
-          <div key={item.id} style={{...styles.card, padding:'10px 15px', marginBottom:'0', display:'flex', alignItems:'center', gap:'10px', width:'auto'}}>
-            <span>{item.icon}</span>
-            <input className="menu-edit-input" style={{width:'80px'}} value={item.name} onChange={e => update(item.id, 'name', e.target.value)} />
-            {hasPrice && <input className="menu-edit-input" style={{width:'50px', color:'#f27a45'}} type="number" value={item.price} onChange={e => update(item.id, 'price', e.target.value)} />}
-            <span onClick={async () => await deleteDoc(doc(db, collectionName, item.id))} style={{color:'#ff4d4f', cursor:'pointer', fontWeight:'bold'}}>✕</span>
+          <div key={item.id} className="glass-card" style={{ padding: '12px 20px', display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '0' }}>
+            <span style={{ fontSize: '1.1rem' }}>{item.icon} {item.name}</span>
+            {hasPrice && <span style={{ color: '#f27a45', fontWeight: '700' }}>${item.price}</span>}
+            <span onClick={() => deleteDoc(doc(db, collectionName, item.id))} style={{ color: '#ff4d4f', cursor: 'pointer', fontWeight: '900', marginLeft: '10px' }}>×</span>
           </div>
         ))}
       </div>
@@ -280,18 +352,15 @@ function DynamicConfigView({ title, collectionName, data, hasPrice = false, plac
   );
 }
 
-// --- 營業統計 ---
+// --- 統計 ---
 function AnalyticsView({ orders }) {
-  const today = new Date().toLocaleDateString();
-  const todayOrders = orders.filter(o => o.status === '已完成' && (o.createdAt?.toDate ? o.createdAt.toDate().toLocaleDateString() : "") === today);
-  const totalRevenue = todayOrders.reduce((sum, o) => sum + Number(o.totalAmount || 0), 0);
-
+  const total = orders.filter(o => o.status === '已完成').reduce((sum, o) => sum + Number(o.totalAmount || 0), 0);
   return (
-    <div style={{ textAlign: 'center' }}>
-      <div style={{ ...styles.card, borderTop: '6px solid #52c41a', padding: '40px' }}>
-        <h3 style={{color: '#888'}}>今日已完成營業額 ({today})</h3>
-        <h1 style={{ fontSize: '48px', color: '#52c41a', margin: '20px 0' }}>NT$ {totalRevenue.toLocaleString()}</h1>
-        <p>今日完成訂單數：{todayOrders.length} 筆</p>
+    <div style={{ textAlign: 'center', padding: '60px 0' }}>
+      <div className="glass-card" style={{ padding: '60px', display: 'inline-block', minWidth: '400px', borderTop: '8px solid #52c41a' }}>
+        <h3 style={{ color: '#888', margin: '0 0 20px' }}>本期累計實收金額</h3>
+        <h1 style={{ fontSize: '4rem', color: '#001529', margin: '0 0 20px' }}>NT$ {total.toLocaleString()}</h1>
+        <div style={{ color: '#52c41a', fontWeight: '700' }}>📈 營運狀況良好</div>
       </div>
     </div>
   );
