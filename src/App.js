@@ -48,7 +48,7 @@ const injectStyles = `
 
   .admin-section-title { 
     font-size: 1.4rem; font-weight: 800; color: var(--dark);
-    margin: 40px 0 20px; display: flex; align-items: center; justify-content: space-between;
+    margin: 20px 0 20px; display: flex; align-items: center; justify-content: space-between;
   }
 
   .menu-edit-input { 
@@ -142,6 +142,14 @@ export default function AdminApp() {
   
   const audioRef = useRef(null);
 
+  // 定義頁首動態標題對照表
+  const tabNames = {
+    'orders': '📋 訂單監控',
+    'history': '📜 歷史歸檔',
+    'menu_all': '🍴 菜單管理',
+    'analytics': '📊 銷售統計'
+  };
+
   useEffect(() => {
     const styleTag = document.createElement("style");
     styleTag.innerHTML = injectStyles;
@@ -182,7 +190,9 @@ export default function AdminApp() {
   return (
     <div style={styles.layout}>
       <header style={styles.topNav}>
-        <div style={{ fontSize: '1.4rem', fontWeight: '900', color: '#001529' }}>K-FOOD <span style={{ color: '#1890ff' }}>ADMIN</span></div>
+        <div style={{ fontSize: '1.4rem', fontWeight: '900', color: '#001529' }}>
+            {tabNames[activeTab] || 'K-FOOD ADMIN'}
+        </div>
         <button style={styles.hamburgerBtn} onClick={() => setIsMenuOpen(!isMenuOpen)}>☰</button>
       </header>
       <div style={styles.dropdownMenu(isMenuOpen)}>
@@ -208,7 +218,7 @@ export default function AdminApp() {
   );
 }
 
-// --- 訂單卡片組件 (已加入歸檔頁面專用退回與刪除按鈕) ---
+// --- 訂單卡片組件 ---
 function OrderCard({ order, filter, isReadOnly = false }) {
   const updateOrder = async (id, status) => await updateDoc(doc(db, "orders", id), { status });
   const removeOrder = async (id) => window.confirm("確定永久刪除此訂單？此動作無法復原。") && await deleteDoc(doc(db, "orders", id));
@@ -271,7 +281,6 @@ function OrderCard({ order, filter, isReadOnly = false }) {
                 <button className="btn-gradient" style={{ background: '#8c8c8c', minWidth: '80px' }} onClick={() => updateOrder(order.id, '處理中')}>退回</button>
               </>
             )}
-            {/* 歷史歸檔專用按鈕 */}
             {filter === '歸檔' && (
               <>
                 <button className="btn-gradient" style={{ background: '#52c41a', minWidth: '80px' }} onClick={() => updateOrder(order.id, '已完成')}>退回</button>
@@ -313,7 +322,8 @@ function HistoryView({ orders }) {
   return (
     <div style={{ animation: 'fadeIn 0.5s' }}>
       <div className="admin-section-title">
-        <span>📜 歷史歸檔紀錄 (共 {archivedOrders.length} 筆)</span>
+        {/* 移除原本的標題文字，只留下搜尋框並靠右對齊 */}
+        <div style={{ flex: 1 }}></div> 
         <input 
           placeholder="🔍 輸入電話查詢歷史..." 
           className="menu-edit-input" 
@@ -360,7 +370,8 @@ function MenuView({ menuItems }) {
   return (
     <div>
       <div className="admin-section-title">
-        <span>🍴 菜單管理</span>
+        {/* 移除 🍴 菜單管理 標題 */}
+        <div style={{ flex: 1 }}></div>
         <button className="btn-gradient" style={{ background: '#1890ff' }} onClick={() => setIsAdding(!isAdding)}>
           {isAdding ? '關閉' : '＋ 新增品項/分類'}
         </button>
@@ -375,7 +386,7 @@ function MenuView({ menuItems }) {
                 {categories.map(c => <option key={c} value={c}>{c}</option>)}
                 {newCatName && <option value={newCatName}>{newCatName}</option>}
               </select>
-              <input placeholder="輸入新分類 (如: 經典鍋物)" className="menu-edit-input" style={{ flex: 1 }} value={newCatName} onChange={e => setNewCatName(e.target.value)} />
+              <input placeholder="輸入新分類" className="menu-edit-input" style={{ flex: 1 }} value={newCatName} onChange={e => setNewCatName(e.target.value)} />
               <button className="btn-gradient" style={{ background: '#001529' }} onClick={() => { if(newCatName) {setNewItem({...newItem, category: newCatName}); alert(`已將分類設為: ${newCatName}`);} }}>套用新分類</button>
             </div>
           </div>
@@ -516,7 +527,8 @@ function AnalyticsView({ orders }) {
   return (
     <div style={{ animation: 'fadeIn 0.5s' }}>
       <div className="admin-section-title">
-        <span>📊 銷售統計數據</span>
+        {/* 移除原本標題文字，保留功能按鈕 */}
+        <div style={{ flex: 1 }}></div> 
         <div className="analytics-tabs">
           <button className={`view-tab ${viewType === 'daily' ? 'active' : ''}`} onClick={() => setViewType('daily')}>每日</button>
           <button className={`view-tab ${viewType === 'monthly' ? 'active' : ''}`} onClick={() => setViewType('monthly')}>每月</button>
