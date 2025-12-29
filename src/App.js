@@ -68,34 +68,19 @@ const injectStyles = `
     background: #e6f7ff; color: #1890ff; padding: 2px 8px; border-radius: 4px; font-size: 12px; margin-right: 5px;
   }
 
-  /* 統計頁面專用美化按鈕樣式 */
   .analytics-tabs {
-    display: flex; 
-    background: #e9ecef; 
-    padding: 5px; 
-    border-radius: 12px; 
-    width: fit-content;
+    display: flex; background: #e9ecef; padding: 5px; border-radius: 12px; width: fit-content;
     box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);
   }
   .view-tab {
-    padding: 8px 20px; 
-    border-radius: 8px; 
-    cursor: pointer; 
-    border: none;
-    font-weight: 700; 
-    font-size: 0.9rem; 
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
-    color: #7a7a7a; 
-    background: transparent;
+    padding: 8px 20px; border-radius: 8px; cursor: pointer; border: none;
+    font-weight: 700; font-size: 0.9rem; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
+    color: #7a7a7a; background: transparent;
   }
-  .view-tab:hover {
-    color: var(--brand-orange);
-  }
+  .view-tab:hover { color: var(--brand-orange); }
   .view-tab.active { 
-    background: #fff; 
-    color: var(--brand-orange); 
-    box-shadow: 0 4px 12px rgba(0,0,0,0.1); 
-    transform: scale(1.02);
+    background: #fff; color: var(--brand-orange); 
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1); transform: scale(1.02);
   }
 
   .date-picker-input {
@@ -223,10 +208,10 @@ export default function AdminApp() {
   );
 }
 
-// --- 訂單卡片組件 (保持不變) ---
-function OrderCard({ order, filter, updateStatus, deleteOrder, isReadOnly = false }) {
+// --- 訂單卡片組件 (已加入歸檔頁面專用退回與刪除按鈕) ---
+function OrderCard({ order, filter, isReadOnly = false }) {
   const updateOrder = async (id, status) => await updateDoc(doc(db, "orders", id), { status });
-  const removeOrder = async (id) => window.confirm("確定永久刪除此訂單？") && await deleteDoc(doc(db, "orders", id));
+  const removeOrder = async (id) => window.confirm("確定永久刪除此訂單？此動作無法復原。") && await deleteDoc(doc(db, "orders", id));
 
   return (
     <div className={`glass-card ${filter === '待處理' ? 'order-pending' : filter === '處理中' ? 'order-processing' : filter === '已完成' ? 'order-completed' : 'order-archived'}`} 
@@ -286,6 +271,13 @@ function OrderCard({ order, filter, updateStatus, deleteOrder, isReadOnly = fals
                 <button className="btn-gradient" style={{ background: '#8c8c8c', minWidth: '80px' }} onClick={() => updateOrder(order.id, '處理中')}>退回</button>
               </>
             )}
+            {/* 歷史歸檔專用按鈕 */}
+            {filter === '歸檔' && (
+              <>
+                <button className="btn-gradient" style={{ background: '#52c41a', minWidth: '80px' }} onClick={() => updateOrder(order.id, '已完成')}>退回</button>
+                <button className="btn-gradient" style={{ background: '#ff4d4f', minWidth: '80px' }} onClick={() => removeOrder(order.id)}>刪除</button>
+              </>
+            )}
           </div>
         )}
       </div>
@@ -319,9 +311,9 @@ function HistoryView({ orders }) {
   const filtered = archivedOrders.filter(o => o.phone?.includes(searchPhone));
 
   return (
-    <div>
+    <div style={{ animation: 'fadeIn 0.5s' }}>
       <div className="admin-section-title">
-        <span>📜 歷史歸檔紀錄</span>
+        <span>📜 歷史歸檔紀錄 (共 {archivedOrders.length} 筆)</span>
         <input 
           placeholder="🔍 輸入電話查詢歷史..." 
           className="menu-edit-input" 
@@ -332,8 +324,9 @@ function HistoryView({ orders }) {
       </div>
       <div style={styles.grid}>
         {filtered.map(order => (
-          <OrderCard key={order.id} order={order} filter="歸檔" isReadOnly={true} />
+          <OrderCard key={order.id} order={order} filter="歸檔" isReadOnly={false} />
         ))}
+        {filtered.length === 0 && <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '100px', color: '#999' }}>查無歸檔數據</div>}
       </div>
     </div>
   );
@@ -484,7 +477,6 @@ function DynamicConfigView({ title, collectionName, data, hasPrice = false, plac
   );
 }
 
-// --- 美化後的銷售統計組件 ---
 function AnalyticsView({ orders }) {
   const [viewType, setViewType] = useState('daily'); 
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
@@ -525,7 +517,6 @@ function AnalyticsView({ orders }) {
     <div style={{ animation: 'fadeIn 0.5s' }}>
       <div className="admin-section-title">
         <span>📊 銷售統計數據</span>
-        {/* 美化後的按鈕選擇器 */}
         <div className="analytics-tabs">
           <button className={`view-tab ${viewType === 'daily' ? 'active' : ''}`} onClick={() => setViewType('daily')}>每日</button>
           <button className={`view-tab ${viewType === 'monthly' ? 'active' : ''}`} onClick={() => setViewType('monthly')}>每月</button>
