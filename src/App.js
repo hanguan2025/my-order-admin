@@ -14,6 +14,12 @@ const injectStyles = `
     --danger: #ff4d4f;
     --dark: #001529;
     --bg: #f4f7fe;
+    --brand-orange: #f27a45;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
   }
 
   @keyframes pulseRed {
@@ -51,11 +57,6 @@ const injectStyles = `
   }
   .menu-edit-input:focus { border-bottom: 2px solid var(--primary); outline: none; background: #f0f7ff; }
 
-  .price-edit-mini {
-    border: none; border-bottom: 1px solid #f27a45; color: #f27a45;
-    width: 45px; font-weight: bold; text-align: center; background: transparent;
-  }
-
   .btn-gradient {
     color: white; border: none; padding: 10px 16px; border-radius: 8px;
     font-weight: 600; cursor: pointer; transition: 0.3s; 
@@ -63,25 +64,60 @@ const injectStyles = `
   }
   .btn-gradient:active { transform: scale(0.95); }
 
+  .customer-badge {
+    background: #e6f7ff; color: #1890ff; padding: 2px 8px; border-radius: 4px; font-size: 12px; margin-right: 5px;
+  }
+
+  /* 統計頁面專用美化按鈕樣式 */
+  .analytics-tabs {
+    display: flex; 
+    background: #e9ecef; 
+    padding: 5px; 
+    border-radius: 12px; 
+    width: fit-content;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);
+  }
+  .view-tab {
+    padding: 8px 20px; 
+    border-radius: 8px; 
+    cursor: pointer; 
+    border: none;
+    font-weight: 700; 
+    font-size: 0.9rem; 
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
+    color: #7a7a7a; 
+    background: transparent;
+  }
+  .view-tab:hover {
+    color: var(--brand-orange);
+  }
+  .view-tab.active { 
+    background: #fff; 
+    color: var(--brand-orange); 
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1); 
+    transform: scale(1.02);
+  }
+
+  .date-picker-input {
+    background: #fff; border: 1px solid #ddd; padding: 10px 15px; border-radius: 10px;
+    font-weight: 600; color: var(--dark); outline: none; transition: 0.3s; cursor: pointer;
+  }
+  .date-picker-input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(24,144,255,0.1); }
+
+  .chart-bar-container {
+    width: 100%; height: 14px; background: #f0f0f0; border-radius: 20px; overflow: hidden; margin-top: 10px;
+  }
+  .chart-bar-fill {
+    height: 100%; background: linear-gradient(90deg, #f27a45, #ffbb96);
+    border-radius: 20px; transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
   .status-toggle {
     padding: 6px 14px; border-radius: 50px; font-size: 11px; font-weight: 800;
     cursor: pointer; border: 1px solid #ddd; display: flex; align-items: center;
     gap: 4px; transition: all 0.3s; background: #f0f0f0 !important; color: #999 !important;
   }
-
-  .status-toggle.toggle-main.active {
-    background: linear-gradient(135deg, #007aff 0%, #005bb5 100%) !important;
-    color: white !important; border-color: #007aff !important;
-  }
-
-  .status-toggle.toggle-extra.active {
-    background: linear-gradient(135deg, #34c759 0%, #248a3d 100%) !important;
-    color: white !important; border-color: #34c759 !important;
-  }
-
-  .customer-badge {
-    background: #e6f7ff; color: #1890ff; padding: 2px 8px; border-radius: 4px; font-size: 12px; margin-right: 5px;
-  }
+  .status-toggle.active { background: var(--primary) !important; color: white !important; }
 `;
 
 const styles = {
@@ -187,8 +223,11 @@ export default function AdminApp() {
   );
 }
 
-// --- 訂單卡片核心組件 ---
+// --- 訂單卡片組件 (保持不變) ---
 function OrderCard({ order, filter, updateStatus, deleteOrder, isReadOnly = false }) {
+  const updateOrder = async (id, status) => await updateDoc(doc(db, "orders", id), { status });
+  const removeOrder = async (id) => window.confirm("確定永久刪除此訂單？") && await deleteDoc(doc(db, "orders", id));
+
   return (
     <div className={`glass-card ${filter === '待處理' ? 'order-pending' : filter === '處理中' ? 'order-processing' : filter === '已完成' ? 'order-completed' : 'order-archived'}`} 
       style={{ padding: '20px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: '320px' }}>
@@ -203,8 +242,8 @@ function OrderCard({ order, filter, updateStatus, deleteOrder, isReadOnly = fals
             </div>
           </div>
           <div style={{ textAlign: 'right', fontSize: '11px', color: '#999' }}>
-             <div>訂單: {order.createdAt?.toDate().toLocaleDateString()}</div>
-             <div>{order.createdAt?.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+              <div>訂單: {order.createdAt?.toDate().toLocaleDateString()}</div>
+              <div>{order.createdAt?.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
           </div>
         </div>
 
@@ -231,20 +270,20 @@ function OrderCard({ order, filter, updateStatus, deleteOrder, isReadOnly = fals
           <div style={{ display: 'flex', gap: '8px' }}>
             {filter === '待處理' && (
               <>
-                <button className="btn-gradient" style={{ background: '#faad14', minWidth: '80px' }} onClick={() => updateStatus(order.id, '處理中')}>接單</button>
-                <button className="btn-gradient" style={{ background: '#ff4d4f', minWidth: '80px' }} onClick={() => deleteOrder(order.id)}>刪除</button>
+                <button className="btn-gradient" style={{ background: '#faad14', minWidth: '80px' }} onClick={() => updateOrder(order.id, '處理中')}>接單</button>
+                <button className="btn-gradient" style={{ background: '#ff4d4f', minWidth: '80px' }} onClick={() => removeOrder(order.id)}>刪除</button>
               </>
             )}
             {filter === '處理中' && (
               <>
-                <button className="btn-gradient" style={{ background: '#52c41a', minWidth: '80px' }} onClick={() => updateStatus(order.id, '已完成')}>完成</button>
-                <button className="btn-gradient" style={{ background: '#8c8c8c', minWidth: '80px' }} onClick={() => updateStatus(order.id, '待處理')}>回退</button>
+                <button className="btn-gradient" style={{ background: '#52c41a', minWidth: '80px' }} onClick={() => updateOrder(order.id, '已完成')}>完成</button>
+                <button className="btn-gradient" style={{ background: '#8c8c8c', minWidth: '80px' }} onClick={() => updateOrder(order.id, '待處理')}>回退</button>
               </>
             )}
             {filter === '已完成' && (
               <>
-                <button className="btn-gradient" style={{ background: '#1890ff', minWidth: '80px' }} onClick={() => updateStatus(order.id, '歸檔')}>歸檔</button>
-                <button className="btn-gradient" style={{ background: '#8c8c8c', minWidth: '80px' }} onClick={() => updateStatus(order.id, '處理中')}>退回</button>
+                <button className="btn-gradient" style={{ background: '#1890ff', minWidth: '80px' }} onClick={() => updateOrder(order.id, '歸檔')}>歸檔</button>
+                <button className="btn-gradient" style={{ background: '#8c8c8c', minWidth: '80px' }} onClick={() => updateOrder(order.id, '處理中')}>退回</button>
               </>
             )}
           </div>
@@ -256,9 +295,6 @@ function OrderCard({ order, filter, updateStatus, deleteOrder, isReadOnly = fals
 
 function OrdersView({ orders }) {
   const [filter, setFilter] = useState('待處理');
-  const updateStatus = async (id, status) => await updateDoc(doc(db, "orders", id), { status });
-  const deleteOrder = async (id) => window.confirm("確定永久刪除此訂單？") && await deleteDoc(doc(db, "orders", id));
-
   return (
     <div>
       <div style={{ display: 'flex', gap: '10px', marginBottom: '30px' }}>
@@ -270,7 +306,7 @@ function OrdersView({ orders }) {
       </div>
       <div style={styles.grid}>
         {orders.filter(o => o.status === filter).map(order => (
-          <OrderCard key={order.id} order={order} filter={filter} updateStatus={updateStatus} deleteOrder={deleteOrder} />
+          <OrderCard key={order.id} order={order} filter={filter} />
         ))}
       </div>
     </div>
@@ -299,7 +335,6 @@ function HistoryView({ orders }) {
           <OrderCard key={order.id} order={order} filter="歸檔" isReadOnly={true} />
         ))}
       </div>
-      {filtered.length === 0 && <div style={{ textAlign: 'center', color: '#999', marginTop: '50px' }}>目前沒有符合搜尋條件的歸檔訂單</div>}
     </div>
   );
 }
@@ -361,10 +396,10 @@ function MenuView({ menuItems }) {
           <div style={{ display: 'flex', gap: '15px', marginBottom: '15px', alignItems: 'center' }}>
             <label style={{ fontSize: '13px', color: '#666', fontWeight: '700' }}>功能開放：</label>
             <div className="config-toggle-group" style={{ display: 'flex', gap: '10px' }}>
-              <button className={`status-toggle toggle-main ${newItem.allowMain ? 'active' : ''}`} onClick={() => setNewItem({...newItem, allowMain: !newItem.allowMain})}>
+              <button className={`status-toggle ${newItem.allowMain ? 'active' : ''}`} onClick={() => setNewItem({...newItem, allowMain: !newItem.allowMain})}>
                 {newItem.allowMain ? '🍚 主食已開' : '⚪ 主食已關'}
               </button>
-              <button className={`status-toggle toggle-extra ${newItem.allowExtras ? 'active' : ''}`} onClick={() => setNewItem({...newItem, allowExtras: !newItem.allowExtras})}>
+              <button className={`status-toggle ${newItem.allowExtras ? 'active' : ''}`} onClick={() => setNewItem({...newItem, allowExtras: !newItem.allowExtras})}>
                 {newItem.allowExtras ? '🥩 加料已開' : '⚪ 加料已關'}
               </button>
             </div>
@@ -378,7 +413,7 @@ function MenuView({ menuItems }) {
       {Object.keys(grouped).map(cat => (
         <div key={cat} style={{ marginBottom: '40px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '15px' }}>
-             <div style={{ background: '#001529', color: '#fff', padding: '8px 20px', borderRadius: '8px', fontSize: '1rem', fontWeight: 'bold' }}>{cat}</div>
+              <div style={{ background: '#001529', color: '#fff', padding: '8px 20px', borderRadius: '8px', fontSize: '1rem', fontWeight: 'bold' }}>{cat}</div>
           </div>
           <div style={styles.grid}>
             {grouped[cat].map(item => (
@@ -390,10 +425,10 @@ function MenuView({ menuItems }) {
                   <button onClick={() => window.confirm('確定下架？') && deleteDoc(doc(db, "menu", item.id))} style={{ color: 'red', border: 'none', background: 'none', cursor: 'pointer' }}>×</button>
                 </div>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                  <button className={`status-toggle toggle-main ${item.allowMain ? 'active' : ''}`} onClick={() => update(item.id, 'allowMain', !item.allowMain)}>
+                  <button className={`status-toggle ${item.allowMain ? 'active' : ''}`} onClick={() => update(item.id, 'allowMain', !item.allowMain)}>
                     {item.allowMain ? '🍚 主食' : '⚪ 關閉'}
                   </button>
-                  <button className={`status-toggle toggle-extra ${item.allowExtras ? 'active' : ''}`} onClick={() => update(item.id, 'allowExtras', !item.allowExtras)}>
+                  <button className={`status-toggle ${item.allowExtras ? 'active' : ''}`} onClick={() => update(item.id, 'allowExtras', !item.allowExtras)}>
                     {item.allowExtras ? '🥩 加料' : '⚪ 關閉'}
                   </button>
                 </div>
@@ -438,7 +473,7 @@ function DynamicConfigView({ title, collectionName, data, hasPrice = false, plac
             {hasPrice && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <span style={{ color: '#f27a45', fontWeight: 'bold' }}>$</span>
-                <input type="number" className="price-edit-mini" defaultValue={item.price} onBlur={(e) => updatePrice(item.id, e.target.value)} />
+                <input type="number" style={{ border: 'none', borderBottom: '1px solid orange', width: '50px', fontWeight: 'bold' }} defaultValue={item.price} onBlur={(e) => updatePrice(item.id, e.target.value)} />
               </div>
             )}
             <span onClick={() => window.confirm('刪除？') && deleteDoc(doc(db, collectionName, item.id))} style={{ color: '#ff4d4f', cursor: 'pointer', marginLeft: '5px' }}>×</span>
@@ -449,13 +484,118 @@ function DynamicConfigView({ title, collectionName, data, hasPrice = false, plac
   );
 }
 
+// --- 美化後的銷售統計組件 ---
 function AnalyticsView({ orders }) {
-  const total = orders.filter(o => o.status === '已完成' || o.status === '歸檔').reduce((sum, o) => sum + Number(o.totalAmount || 0), 0);
+  const [viewType, setViewType] = useState('daily'); 
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  
+  const validOrders = orders.filter(o => (o.status === '已完成' || o.status === '歸檔') && o.createdAt);
+
+  const filteredOrders = validOrders.filter(o => {
+    const orderDate = o.createdAt.toDate();
+    const sel = new Date(selectedDate);
+    if (viewType === 'daily') return orderDate.toLocaleDateString() === sel.toLocaleDateString();
+    if (viewType === 'monthly') return orderDate.getFullYear() === sel.getFullYear() && orderDate.getMonth() === sel.getMonth();
+    return orderDate.getFullYear() === sel.getFullYear();
+  });
+
+  const totalAmount = filteredOrders.reduce((sum, o) => sum + Number(o.totalAmount || 0), 0);
+  const orderCount = filteredOrders.length;
+
+  const dishStats = {};
+  let totalDishes = 0;
+  filteredOrders.forEach(o => {
+    o.items?.forEach(it => {
+      const key = it.name;
+      if(!dishStats[key]) dishStats[key] = { count: 0, total: 0, emoji: it.emoji || '🍲' };
+      dishStats[key].count += 1;
+      dishStats[key].total += Number(it.finalPrice || 0);
+      totalDishes += 1;
+    });
+  });
+
+  const getTimeLabel = () => {
+    const d = new Date(selectedDate);
+    if (viewType === 'daily') return d.toLocaleDateString();
+    if (viewType === 'monthly') return `${d.getFullYear()}年 ${d.getMonth() + 1}月`;
+    return `${d.getFullYear()}年度`;
+  };
+
   return (
-    <div style={{ textAlign: 'center', padding: '60px 0' }}>
-      <div className="glass-card" style={{ padding: '40px', display: 'inline-block', minWidth: '320px' }}>
-        <h3 style={{ color: '#888', marginBottom: '10px' }}>總累計營業額</h3>
-        <h1 style={{ fontSize: '3.5rem', color: '#001529', margin: 0 }}>${total.toLocaleString()}</h1>
+    <div style={{ animation: 'fadeIn 0.5s' }}>
+      <div className="admin-section-title">
+        <span>📊 銷售統計數據</span>
+        {/* 美化後的按鈕選擇器 */}
+        <div className="analytics-tabs">
+          <button className={`view-tab ${viewType === 'daily' ? 'active' : ''}`} onClick={() => setViewType('daily')}>每日</button>
+          <button className={`view-tab ${viewType === 'monthly' ? 'active' : ''}`} onClick={() => setViewType('monthly')}>每月</button>
+          <button className={`view-tab ${viewType === 'yearly' ? 'active' : ''}`} onClick={() => setViewType('yearly')}>每年</button>
+        </div>
+      </div>
+
+      <div style={{ marginBottom: '30px', display: 'flex', justifyContent: 'flex-start' }}>
+        <input 
+          type={viewType === 'daily' ? 'date' : viewType === 'monthly' ? 'month' : 'number'} 
+          className="date-picker-input" 
+          value={viewType === 'yearly' ? new Date(selectedDate).getFullYear() : selectedDate.slice(0, viewType === 'monthly' ? 7 : 10)} 
+          onChange={(e) => {
+            let val = e.target.value;
+            if(viewType === 'yearly') val = `${val}-01-01`;
+            if(viewType === 'monthly') val = `${val}-01`;
+            setSelectedDate(val);
+          }} 
+        />
+      </div>
+
+      <div className="glass-card" style={{ padding: '40px 20px', textAlign: 'center', marginBottom: '30px', borderBottom: '6px solid var(--brand-orange)' }}>
+        <div style={{ color: '#888', marginBottom: '10px', fontWeight: 'bold', fontSize: '1.1rem' }}>{getTimeLabel()} 營收總額</div>
+        <div style={{ fontSize: '3.8rem', fontWeight: '900', color: '#f27a45', margin: '10px 0' }}>NT$ {totalAmount.toLocaleString()}</div>
+        <div style={{ color: '#666', fontSize: '1.1rem' }}>共完成 <span style={{ color: '#001529', fontWeight: 'bold' }}>{orderCount}</span> 筆訂單</div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '30px', alignItems: 'start' }}>
+        <div>
+          <h3 style={{ fontSize: '1.1rem', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>📝 成交訂單明細</h3>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+            {filteredOrders.map((o, idx) => (
+              <div key={o.id} className="glass-card" style={{ padding: '18px', borderLeft: '5px solid #f27a45' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <span style={{ fontWeight: '800', color: '#001529' }}>#{String(idx + 1).padStart(4, '0')} 訂單</span>
+                  <span style={{ color: '#f27a45', fontWeight: '900' }}>${o.totalAmount}</span>
+                </div>
+                <div style={{ fontSize: '0.85rem', color: '#888', marginBottom: '8px' }}>{o.createdAt?.toDate().toLocaleString()} · {o.tableNum}桌</div>
+                <div style={{ fontSize: '0.9rem', color: '#555' }}>
+                  {o.items?.map((it, i) => <span key={i}>🔥 {it.name}{i < o.items.length-1 ? '、' : ''}</span>)}
+                </div>
+              </div>
+            ))}
+            {orderCount === 0 && <div className="glass-card" style={{ padding: '40px', textAlign: 'center', color: '#999' }}>此時段尚無交易數據</div>}
+          </div>
+        </div>
+
+        <div>
+          <h3 style={{ fontSize: '1.1rem', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>📊 熱門品項銷售分佈</h3>
+          <div className="glass-card" style={{ padding: '25px' }}>
+            {Object.entries(dishStats).sort((a,b) => b[1].count - a[1].count).map(([name, data]) => {
+              const percentage = totalDishes > 0 ? (data.count / totalDishes) * 100 : 0;
+              return (
+                <div key={name} style={{ marginBottom: '25px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ fontWeight: '700', fontSize: '1rem', color: '#001529' }}>{data.emoji} {name}</div>
+                    <div style={{ textAlign: 'right' }}>
+                      <span style={{ color: '#f27a45', fontWeight: '900', fontSize: '1.1rem' }}>{data.count} 份</span>
+                      <span style={{ color: '#999', fontSize: '0.8rem', marginLeft: '8px' }}>(${data.total.toLocaleString()})</span>
+                    </div>
+                  </div>
+                  <div className="chart-bar-container">
+                    <div className="chart-bar-fill" style={{ width: `${percentage}%` }}></div>
+                  </div>
+                </div>
+              );
+            })}
+            {Object.keys(dishStats).length === 0 && <div style={{ textAlign: 'center', color: '#999' }}>暫無銷售數據</div>}
+          </div>
+        </div>
       </div>
     </div>
   );
