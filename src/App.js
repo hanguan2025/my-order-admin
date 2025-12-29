@@ -50,6 +50,11 @@ const injectStyles = `
   }
   .menu-edit-input:focus { border-bottom: 2px solid var(--primary); outline: none; background: #f0f7ff; }
 
+  .price-edit-mini {
+    border: none; border-bottom: 1px solid #f27a45; color: #f27a45;
+    width: 45px; font-weight: bold; text-align: center; background: transparent;
+  }
+
   .btn-gradient {
     color: white; border: none; padding: 10px 16px; border-radius: 8px;
     font-weight: 600; cursor: pointer; transition: 0.3s; 
@@ -57,22 +62,15 @@ const injectStyles = `
   }
   .btn-gradient:active { transform: scale(0.95); }
 
-  /* 訂單按鈕群組：確保按鈕之間有間距 */
-  .order-btn-group {
-    display: flex; gap: 8px;
-  }
-  .order-btn-group button {
-    min-width: 80px;
-  }
+  .order-btn-group { display: flex; gap: 8px; }
+  .order-btn-group button { min-width: 80px; }
 
   .customer-badge {
     background: #e6f7ff; color: #1890ff; padding: 2px 8px; border-radius: 4px; font-size: 12px; margin-right: 5px;
   }
 
   @media (max-width: 600px) {
-    .order-btn-group button {
-       font-size: 12px; padding: 8px 10px;
-    }
+    .order-btn-group button { font-size: 12px; padding: 8px 10px; }
   }
 `;
 
@@ -122,27 +120,21 @@ export default function AdminApp() {
 
   useEffect(() => {
     if (!isLoggedIn) return;
-    
     const unsubOrders = onSnapshot(query(collection(db, "orders"), orderBy("createdAt", "desc")), (s) => {
       s.docChanges().forEach(change => {
         if (change.type === "added" && change.doc.data().status === "待處理") {
-          audioRef.current?.play().catch(() => console.log("等待互動播放"));
+          audioRef.current?.play().catch(() => console.log("音效播放失敗"));
         }
       });
       setOrders(s.docs.map(d => ({...d.data(), id: d.id})));
     });
-
     const unsubMenu = onSnapshot(query(collection(db, "menu"), orderBy("category", "asc")), (s) => setMenuItems(s.docs.map(d => ({...d.data(), id: d.id}))));
     const unsubMains = onSnapshot(collection(db, "mains"), (s) => setMains(s.docs.map(d => ({...d.data(), id: d.id}))));
     const unsubExtras = onSnapshot(collection(db, "extras"), (s) => setExtras(s.docs.map(d => ({...d.data(), id: d.id}))));
-    
     return () => { unsubOrders(); unsubMenu(); unsubMains(); unsubExtras(); };
   }, [isLoggedIn]);
 
-  const handleLogin = () => {
-    if (password === "20250909") setIsLoggedIn(true);
-    else alert("密碼錯誤");
-  };
+  const handleLogin = () => { if (password === "20250909") setIsLoggedIn(true); else alert("密碼錯誤"); };
 
   if (!isLoggedIn) {
     return (
@@ -173,8 +165,8 @@ export default function AdminApp() {
         {activeTab === 'menu_all' && (
           <>
             <MenuView menuItems={menuItems} />
-            <DynamicConfigView title="🍚 主食庫存選項" collectionName="mains" data={mains} placeholder="名稱" />
-            <DynamicConfigView title="🥩 加料庫存選項" collectionName="extras" data={extras} hasPrice={true} placeholder="名稱" />
+            <DynamicConfigView title="🍚 主食選項管理" collectionName="mains" data={mains} placeholder="名稱" />
+            <DynamicConfigView title="🥩 加料選項管理" collectionName="extras" data={extras} hasPrice={true} placeholder="名稱" />
           </>
         )}
         {activeTab === 'analytics' && <AnalyticsView orders={orders} />}
@@ -197,99 +189,36 @@ function OrdersView({ orders }) {
           </div>
         ))}
       </div>
-      
-      {/* 修正 1：Grid 容器增加 grid-auto-rows 確保行高穩定，防止擠壓 */}
-      <div style={{ 
-        ...styles.grid, 
-        alignItems: 'stretch', 
-        gridAutoRows: '1fr' // 關鍵：確保同一列的所有卡片高度一致，且根據內容伸縮
-      }}>
+      <div style={{ ...styles.grid, alignItems: 'stretch', gridAutoRows: '1fr' }}>
         {orders.filter(o => o.status === filter).map(order => (
-          <div 
-            key={order.id} 
-            className={`glass-card ${filter === '待處理' ? 'order-pending' : filter === '處理中' ? 'order-processing' : 'order-completed'}`} 
-            style={{ 
-              padding: '20px',
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'space-between', // 修正 2：改用 space-between 自動分佈頂部與底部
-              height: 'auto',                // 改為自動高度
-              minHeight: '280px'             // 設定一個合理的最小高度
-            }}
-          >
-            {/* 上半部分容器 */}
+          <div key={order.id} className={`glass-card ${filter === '待處理' ? 'order-pending' : filter === '處理中' ? 'order-processing' : 'order-completed'}`} style={{ padding: '20px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: '280px' }}>
             <div>
-              {/* 卡片頂部 */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
                 <div>
                   <div style={{ fontSize: '1.4rem', fontWeight: '800' }}>🪑 桌號：{order.tableNum}</div>
-                  <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '4px' }}>
-                    <span className="customer-badge">{order.customerName}</span> {order.phone}
-                  </div>
+                  <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '4px' }}><span className="customer-badge">{order.customerName}</span> {order.phone}</div>
                 </div>
-                <span style={{ fontSize: '12px', color: '#999' }}>
-                  {order.createdAt ? order.createdAt.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "--:--"}
-                </span>
+                <span style={{ fontSize: '12px', color: '#999' }}>{order.createdAt?.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) || '--:--'}</span>
               </div>
-
-              {/* 訂單內容區 */}
               <div style={{ background: '#f0f2f5', padding: '12px', borderRadius: '10px', fontSize: '0.95rem', marginBottom: '10px' }}>
                 <div style={{ marginBottom: '8px', color: '#888', fontSize: '0.8rem', borderBottom: '1px solid #ddd', paddingBottom: '4px' }}>💳 {order.paymentMethod || '未指定'}</div>
                 {order.items?.map((it, i) => (
                   <div key={i} style={{ padding: '6px 0', borderBottom: i === order.items.length - 1 ? 'none' : '1px dashed #ccc' }}>
                     <div style={{ fontWeight: '700' }}>{it.emoji} {it.name} <span style={{ float: 'right', color: '#f27a45' }}>${it.finalPrice}</span></div>
-                    <div style={{ fontSize: '12px', color: '#666', marginTop: '3px' }}>
-                      🍜 {it.main || '無'} | ➕ {it.extras?.map(e => e.name).join(', ') || '無'}
-                    </div>
+                    <div style={{ fontSize: '12px', color: '#666', marginTop: '3px' }}>🍜 {it.main || '無'} | ➕ {it.extras?.map(e => e.name).join(', ') || '無'}</div>
                   </div>
                 ))}
                 {order.note && <div style={{ marginTop: '10px', color: '#d48806', fontSize: '13px', borderTop: '1px solid #ddd', paddingTop: '5px' }}>📝 備註：{order.note}</div>}
               </div>
             </div>
-
-            {/* 下半部分容器（強制貼底） */}
-<div style={{ 
-  display: 'flex', 
-  justifyContent: 'space-between', // 始終保持左右兩端對齊
-  alignItems: 'center', 
-  marginTop: '15px',
-  paddingTop: '10px',
-  borderTop: '1px solid #eee'
-}}>
-   {/* 總額始終在左側 */}
-   <span style={{ 
-     color: '#001529', 
-     fontWeight: '900', 
-     fontSize: '1.25rem'
-   }}>
-     總額 ${order.totalAmount}
-   </span>
-   
-   {/* 按鈕群組區塊 */}
-   <div className="order-btn-group" style={{ margin: 0 }}>
-    {filter === '待處理' && (
-      <>
-        <button className="btn-gradient" style={{ background: '#faad14' }} onClick={() => updateStatus(order.id, '處理中')}>接單</button>
-        <button className="btn-gradient" style={{ background: '#ff4d4f' }} onClick={() => deleteOrder(order.id)}>刪除</button>
-      </>
-    )}
-    
-    {filter === '處理中' && (
-      <>
-        <button className="btn-gradient" style={{ background: '#52c41a' }} onClick={() => updateStatus(order.id, '已完成')}>完成</button>
-        <button className="btn-gradient" style={{ background: '#8c8c8c' }} onClick={() => updateStatus(order.id, '待處理')}>回退</button>
-      </>
-    )}
-
-    {filter === '已完成' && (
-      <>
-        {/* 已完成頁面的功能按鈕 */}
-        <button className="btn-gradient" style={{ background: '#1890ff' }} onClick={() => updateStatus(order.id, '歸檔')}>歸檔</button>
-        <button className="btn-gradient" style={{ background: '#8c8c8c' }} onClick={() => updateStatus(order.id, '處理中')}>重做</button>
-      </>
-    )}
-  </div>
-</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '15px', paddingTop: '10px', borderTop: '1px solid #eee' }}>
+              <span style={{ color: '#001529', fontWeight: '900', fontSize: '1.25rem' }}>總額 ${order.totalAmount}</span>
+              <div className="order-btn-group">
+                {filter === '待處理' && ( <> <button className="btn-gradient" style={{ background: '#faad14' }} onClick={() => updateStatus(order.id, '處理中')}>接單</button> <button className="btn-gradient" style={{ background: '#ff4d4f' }} onClick={() => deleteOrder(order.id)}>刪除</button> </> )}
+                {filter === '處理中' && ( <> <button className="btn-gradient" style={{ background: '#52c41a' }} onClick={() => updateStatus(order.id, '已完成')}>完成</button> <button className="btn-gradient" style={{ background: '#8c8c8c' }} onClick={() => updateStatus(order.id, '待處理')}>回退</button> </> )}
+                {filter === '已完成' && ( <> <button className="btn-gradient" style={{ background: '#1890ff' }} onClick={() => updateStatus(order.id, '歸檔')}>歸檔</button> <button className="btn-gradient" style={{ background: '#8c8c8c' }} onClick={() => updateStatus(order.id, '處理中')}>重做</button> </> )}
+              </div>
+            </div>
           </div>
         ))}
       </div>
@@ -297,7 +226,6 @@ function OrdersView({ orders }) {
   );
 }
 
-// --- 菜單管理與其餘元件 ---
 function MenuView({ menuItems }) {
   const [isAdding, setIsAdding] = useState(false);
   const [newItem, setNewItem] = useState({ name: '', price: '', emoji: '🍲', category: '經典鍋物', allowMain: true, allowExtras: true });
@@ -317,19 +245,16 @@ function MenuView({ menuItems }) {
 
   return (
     <div>
-      <div className="admin-section-title">
-        <span>🥘 菜單管理</span>
-        <button className="btn-gradient" style={{ background: '#1890ff' }} onClick={() => setIsAdding(!isAdding)}>{isAdding ? '關閉' : '＋ 新增'}</button>
-      </div>
+      <div className="admin-section-title"><span>🍴 菜單管理</span><button className="btn-gradient" style={{ background: '#1890ff' }} onClick={() => setIsAdding(!isAdding)}>{isAdding ? '關閉' : '＋ 新增品項'}</button></div>
       {isAdding && (
         <div className="glass-card" style={{ padding: '24px', marginBottom: '24px', border: '2px dashed #1890ff' }}>
-          <input placeholder="分類" className="menu-edit-input" style={{ marginBottom: '15px' }} value={newItem.category} onChange={e => setNewItem({...newItem, category: e.target.value})} />
+          <input placeholder="分類 (如: 經典鍋物)" className="menu-edit-input" style={{ marginBottom: '15px' }} value={newItem.category} onChange={e => setNewItem({...newItem, category: e.target.value})} />
           <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
             <input placeholder="圖" className="menu-edit-input" style={{ width: '50px' }} value={newItem.emoji} onChange={e => setNewItem({...newItem, emoji: e.target.value})} />
             <input placeholder="品名" className="menu-edit-input" value={newItem.name} onChange={e => setNewItem({...newItem, name: e.target.value})} />
             <input placeholder="價格" type="number" className="menu-edit-input" style={{ width: '80px' }} value={newItem.price} onChange={e => setNewItem({...newItem, price: e.target.value})} />
           </div>
-          <button className="btn-gradient" style={{ width: '100%', background: '#52c41a' }} onClick={add}>確認新增</button>
+          <button className="btn-gradient" style={{ width: '100%', background: '#52c41a' }} onClick={add}>確認新增到菜單</button>
         </div>
       )}
       {Object.keys(grouped).map(cat => (
@@ -342,7 +267,7 @@ function MenuView({ menuItems }) {
                   <input className="menu-edit-input" style={{ width: '35px' }} value={item.emoji} onChange={e => update(item.id, 'emoji', e.target.value)} />
                   <input className="menu-edit-input" value={item.name} onChange={e => update(item.id, 'name', e.target.value)} />
                   <input className="menu-edit-input" style={{ width: '60px' }} type="number" value={item.price} onChange={e => update(item.id, 'price', Number(e.target.value))} />
-                  <button onClick={() => window.confirm('下架？') && deleteDoc(doc(db, "menu", item.id))} style={{ color: 'red', border: 'none', background: 'none' }}>×</button>
+                  <button onClick={() => window.confirm('確定下架此商品？') && deleteDoc(doc(db, "menu", item.id))} style={{ color: 'red', border: 'none', background: 'none', cursor: 'pointer' }}>×</button>
                 </div>
               </div>
             ))}
@@ -356,12 +281,18 @@ function MenuView({ menuItems }) {
 function DynamicConfigView({ title, collectionName, data, hasPrice = false, placeholder }) {
   const [isAdding, setIsAdding] = useState(false);
   const [newItem, setNewItem] = useState({ name: '', price: 0, icon: '✨' });
+
   const add = async () => {
     if (!newItem.name) return;
     await addDoc(collection(db, collectionName), newItem);
     setNewItem({ name: '', price: 0, icon: '✨' });
     setIsAdding(false);
   };
+
+  const updatePrice = async (id, newPrice) => {
+    await updateDoc(doc(db, collectionName, id), { price: Number(newPrice) });
+  };
+
   return (
     <div style={{ marginTop: '40px' }}>
       <div className="admin-section-title"><span>{title}</span><button className="btn-gradient" style={{ background: '#52c41a' }} onClick={() => setIsAdding(!isAdding)}>+</button></div>
@@ -370,17 +301,28 @@ function DynamicConfigView({ title, collectionName, data, hasPrice = false, plac
           <div style={{ display: 'flex', gap: '10px' }}>
             <input placeholder="圖" className="menu-edit-input" style={{ width: '45px' }} value={newItem.icon} onChange={e => setNewItem({...newItem, icon: e.target.value})} />
             <input placeholder={placeholder} className="menu-edit-input" value={newItem.name} onChange={e => setNewItem({...newItem, name: e.target.value})} />
-            {hasPrice && <input placeholder="價" type="number" className="menu-edit-input" style={{ width: '60px' }} onChange={e => setNewItem({...newItem, price: Number(e.target.value)})} />}
-            <button className="btn-gradient" style={{ background: '#52c41a' }} onClick={add}>OK</button>
+            {hasPrice && <input placeholder="價格" type="number" className="menu-edit-input" style={{ width: '70px' }} onChange={e => setNewItem({...newItem, price: Number(e.target.value)})} />}
+            <button className="btn-gradient" style={{ background: '#52c41a' }} onClick={add}>確認</button>
           </div>
         </div>
       )}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
         {data.map(item => (
-          <div key={item.id} className="glass-card" style={{ padding: '8px 15px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span>{item.icon} {item.name}</span>
-            {hasPrice && <span style={{ color: '#f27a45' }}>${item.price}</span>}
-            <span onClick={() => deleteDoc(doc(db, collectionName, item.id))} style={{ color: 'red', cursor: 'pointer' }}>×</span>
+          <div key={item.id} className="glass-card" style={{ padding: '10px 18px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ fontSize: '1.1rem' }}>{item.icon} {item.name}</span>
+            {hasPrice && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <span style={{ color: '#f27a45', fontWeight: 'bold' }}>$</span>
+                <input 
+                  type="number" 
+                  className="price-edit-mini"
+                  defaultValue={item.price} 
+                  onBlur={(e) => updatePrice(item.id, e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && updatePrice(item.id, e.target.value)}
+                />
+              </div>
+            )}
+            <span onClick={() => window.confirm('刪除此選項？') && deleteDoc(doc(db, collectionName, item.id))} style={{ color: '#ff4d4f', cursor: 'pointer', marginLeft: '5px', fontSize: '18px' }}>×</span>
           </div>
         ))}
       </div>
@@ -392,9 +334,9 @@ function AnalyticsView({ orders }) {
   const total = orders.filter(o => o.status === '已完成' || o.status === '歸檔').reduce((sum, o) => sum + Number(o.totalAmount || 0), 0);
   return (
     <div style={{ textAlign: 'center', padding: '60px 0' }}>
-      <div className="glass-card" style={{ padding: '40px', display: 'inline-block', minWidth: '300px' }}>
-        <h3 style={{ color: '#888' }}>累計營業額</h3>
-        <h1 style={{ fontSize: '3rem', color: '#001529' }}>${total.toLocaleString()}</h1>
+      <div className="glass-card" style={{ padding: '40px', display: 'inline-block', minWidth: '320px' }}>
+        <h3 style={{ color: '#888', marginBottom: '10px' }}>總累計營業額</h3>
+        <h1 style={{ fontSize: '3.5rem', color: '#001529', margin: 0 }}>${total.toLocaleString()}</h1>
       </div>
     </div>
   );
