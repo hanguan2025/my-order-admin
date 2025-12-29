@@ -50,26 +50,30 @@ const injectStyles = `
   }
   .menu-edit-input:focus { border-bottom: 2px solid var(--primary); outline: none; background: #f0f7ff; }
 
-  .toggle-pill {
-    display: flex; align-items: center; gap: 6px; padding: 6px 12px;
-    border-radius: 20px; font-size: 12px; font-weight: 600; cursor: pointer;
-    transition: 0.3s; border: 1.5px solid #eee; background: #fff; color: #888;
-  }
-  .toggle-pill.active { background: #e6f7ff; color: var(--primary); border-color: var(--primary); }
-
-  .category-header {
-    background: linear-gradient(135deg, var(--dark) 0%, #2b4162 100%);
-    color: white; padding: 12px 24px; border-radius: 12px; margin-bottom: 20px;
-    display: inline-flex; align-items: center; gap: 10px; font-weight: 600;
-  }
-
   .btn-gradient {
-    background: linear-gradient(135deg, #1890ff 0%, #096dd9 100%);
-    color: white; border: none; padding: 10px 24px; border-radius: 8px;
-    font-weight: 600; cursor: pointer; box-shadow: 0 4px 14px rgba(24, 144, 255, 0.3);
-    transition: 0.3s; display: inline-block; text-align: center;
+    color: white; border: none; padding: 10px 16px; border-radius: 8px;
+    font-weight: 600; cursor: pointer; transition: 0.3s; 
+    font-size: 0.9rem; text-align: center;
   }
   .btn-gradient:active { transform: scale(0.95); }
+
+  /* 訂單按鈕群組：確保按鈕之間有間距 */
+  .order-btn-group {
+    display: flex; gap: 8px;
+  }
+  .order-btn-group button {
+    min-width: 80px;
+  }
+
+  .customer-badge {
+    background: #e6f7ff; color: #1890ff; padding: 2px 8px; border-radius: 4px; font-size: 12px; margin-right: 5px;
+  }
+
+  @media (max-width: 600px) {
+    .order-btn-group button {
+       font-size: 12px; padding: 8px 10px;
+    }
+  }
 `;
 
 const styles = {
@@ -92,7 +96,8 @@ const styles = {
   statusTab: (active, color) => ({ 
     flex: 1, padding: '16px', borderRadius: '14px', cursor: 'pointer', textAlign: 'center', 
     backgroundColor: active ? color : '#fff', color: active ? '#fff' : '#555', 
-    fontWeight: '700', transition: '0.3s', boxShadow: active ? '0 8px 20px rgba(0,0,0,0.1)' : 'none' 
+    fontWeight: '700', transition: '0.3s', boxShadow: active ? '0 8px 20px rgba(0,0,0,0.1)' : 'none',
+    fontSize: '0.9rem'
   })
 };
 
@@ -106,7 +111,6 @@ export default function AdminApp() {
   const [mains, setMains] = useState([]);
   const [extras, setExtras] = useState([]);
   
-  // 修正音效引用與靜音策略
   const audioRef = useRef(null);
 
   useEffect(() => {
@@ -122,7 +126,7 @@ export default function AdminApp() {
     const unsubOrders = onSnapshot(query(collection(db, "orders"), orderBy("createdAt", "desc")), (s) => {
       s.docChanges().forEach(change => {
         if (change.type === "added" && change.doc.data().status === "待處理") {
-          audioRef.current?.play().catch(() => console.log("等待使用者互動以播放音效"));
+          audioRef.current?.play().catch(() => console.log("等待互動播放"));
         }
       });
       setOrders(s.docs.map(d => ({...d.data(), id: d.id})));
@@ -143,18 +147,10 @@ export default function AdminApp() {
   if (!isLoggedIn) {
     return (
       <div style={{ height: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', background: 'linear-gradient(135deg, #001529 0%, #003a8c 100%)' }}>
-        <div className="glass-card" style={{ padding: '50px', textAlign: 'center', width: '320px' }}>
+        <div className="glass-card" style={{ padding: '40px', textAlign: 'center', width: '320px' }}>
           <h2 style={{ margin: '0 0 30px', color: '#001529' }}>🥘 韓館管理系統</h2>
-          <input 
-            type="password" 
-            placeholder="管理員密碼" 
-            className="menu-edit-input" 
-            style={{ marginBottom: '30px', textAlign: 'center' }} 
-            value={password} 
-            onChange={(e) => setPassword(e.target.value)} 
-            onKeyPress={(e) => e.key === 'Enter' && handleLogin()} 
-          />
-          <button className="btn-gradient" style={{ width: '100%' }} onClick={handleLogin}>立即登入</button>
+          <input type="password" placeholder="管理員密碼" className="menu-edit-input" style={{ marginBottom: '30px', textAlign: 'center' }} value={password} onChange={(e) => setPassword(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && handleLogin()} />
+          <button className="btn-gradient" style={{ width: '100%', background: '#1890ff' }} onClick={handleLogin}>立即登入</button>
         </div>
       </div>
     );
@@ -166,16 +162,12 @@ export default function AdminApp() {
         <div style={{ fontSize: '1.4rem', fontWeight: '900', color: '#001529' }}>K-FOOD <span style={{ color: '#1890ff' }}>ADMIN</span></div>
         <button style={styles.hamburgerBtn} onClick={() => setIsMenuOpen(!isMenuOpen)}>☰</button>
       </header>
-
-      {isMenuOpen && <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 999 }} onClick={() => setIsMenuOpen(false)}></div>}
-      
       <div style={styles.dropdownMenu(isMenuOpen)}>
         <div style={styles.menuItem(activeTab === 'orders')} onClick={() => {setActiveTab('orders'); setIsMenuOpen(false);}}>📋 訂單監控</div>
         <div style={styles.menuItem(activeTab === 'menu_all')} onClick={() => {setActiveTab('menu_all'); setIsMenuOpen(false);}}>🍴 菜單管理</div>
         <div style={styles.menuItem(activeTab === 'analytics')} onClick={() => {setActiveTab('analytics'); setIsMenuOpen(false);}}>📊 銷售統計</div>
         <div style={{ ...styles.menuItem(false), color: '#ff4d4f', borderTop: '1px solid #333' }} onClick={() => setIsLoggedIn(false)}>🚪 登出系統</div>
       </div>
-
       <main style={styles.main}>
         {activeTab === 'orders' && <OrdersView orders={orders} />}
         {activeTab === 'menu_all' && (
@@ -191,47 +183,113 @@ export default function AdminApp() {
   );
 }
 
-// --- 訂單監控視圖 ---
 function OrdersView({ orders }) {
   const [filter, setFilter] = useState('待處理');
   const updateStatus = async (id, status) => await updateDoc(doc(db, "orders", id), { status });
+  const deleteOrder = async (id) => window.confirm("確定永久刪除此訂單？") && await deleteDoc(doc(db, "orders", id));
 
   return (
     <div>
-      <div style={{ display: 'flex', gap: '15px', marginBottom: '30px' }}>
+      <div style={{ display: 'flex', gap: '10px', marginBottom: '30px' }}>
         {['待處理', '處理中', '已完成'].map(s => (
           <div key={s} style={styles.statusTab(filter === s, s === '待處理' ? '#ff4d4f' : s === '處理中' ? '#faad14' : '#52c41a')} onClick={() => setFilter(s)}>
-            {s} · {orders.filter(o => o.status === s).length}
+            {s} ({orders.filter(o => o.status === s).length})
           </div>
         ))}
       </div>
-      <div style={styles.grid}>
+      
+      {/* 修正 1：Grid 容器增加 grid-auto-rows 確保行高穩定，防止擠壓 */}
+      <div style={{ 
+        ...styles.grid, 
+        alignItems: 'stretch', 
+        gridAutoRows: '1fr' // 關鍵：確保同一列的所有卡片高度一致，且根據內容伸縮
+      }}>
         {orders.filter(o => o.status === filter).map(order => (
-          <div key={order.id} className={`glass-card ${filter === '待處理' ? 'order-pending' : filter === '處理中' ? 'order-processing' : 'order-completed'}`} style={{ padding: '24px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px' }}>
-              <span style={{ fontSize: '1.4rem', fontWeight: '800' }}>🪑 桌號：{order.tableNum}</span>
-              <span style={{ fontSize: '13px', color: '#999' }}>
-                {order.createdAt ? order.createdAt.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "讀取中..."}
-              </span>
-            </div>
-            <div style={{ background: '#f8f9fa', padding: '15px', borderRadius: '12px', marginBottom: '20px' }}>
-              {order.items?.map((it, i) => (
-                <div key={i} style={{ padding: '8px 0', borderBottom: i === order.items.length - 1 ? 'none' : '1px dashed #ddd' }}>
-                  <div style={{ fontWeight: '700' }}>{it.emoji} {it.name}</div>
-                  <div style={{ fontSize: '12px', color: '#777', marginTop: '4px' }}>
-                    🍜 {it.main || '無'} | ➕ {it.extras?.map(e => e.name).join(', ') || '無'}
+          <div 
+            key={order.id} 
+            className={`glass-card ${filter === '待處理' ? 'order-pending' : filter === '處理中' ? 'order-processing' : 'order-completed'}`} 
+            style={{ 
+              padding: '20px',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between', // 修正 2：改用 space-between 自動分佈頂部與底部
+              height: 'auto',                // 改為自動高度
+              minHeight: '280px'             // 設定一個合理的最小高度
+            }}
+          >
+            {/* 上半部分容器 */}
+            <div>
+              {/* 卡片頂部 */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+                <div>
+                  <div style={{ fontSize: '1.4rem', fontWeight: '800' }}>🪑 桌號：{order.tableNum}</div>
+                  <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '4px' }}>
+                    <span className="customer-badge">{order.customerName}</span> {order.phone}
                   </div>
                 </div>
-              ))}
+                <span style={{ fontSize: '12px', color: '#999' }}>
+                  {order.createdAt ? order.createdAt.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "--:--"}
+                </span>
+              </div>
+
+              {/* 訂單內容區 */}
+              <div style={{ background: '#f0f2f5', padding: '12px', borderRadius: '10px', fontSize: '0.95rem', marginBottom: '10px' }}>
+                <div style={{ marginBottom: '8px', color: '#888', fontSize: '0.8rem', borderBottom: '1px solid #ddd', paddingBottom: '4px' }}>💳 {order.paymentMethod || '未指定'}</div>
+                {order.items?.map((it, i) => (
+                  <div key={i} style={{ padding: '6px 0', borderBottom: i === order.items.length - 1 ? 'none' : '1px dashed #ccc' }}>
+                    <div style={{ fontWeight: '700' }}>{it.emoji} {it.name} <span style={{ float: 'right', color: '#f27a45' }}>${it.finalPrice}</span></div>
+                    <div style={{ fontSize: '12px', color: '#666', marginTop: '3px' }}>
+                      🍜 {it.main || '無'} | ➕ {it.extras?.map(e => e.name).join(', ') || '無'}
+                    </div>
+                  </div>
+                ))}
+                {order.note && <div style={{ marginTop: '10px', color: '#d48806', fontSize: '13px', borderTop: '1px solid #ddd', paddingTop: '5px' }}>📝 備註：{order.note}</div>}
+              </div>
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ color: '#f27a45', fontWeight: '900', fontSize: '1.4rem' }}>NT$ {order.totalAmount}</span>
-              <button className="btn-gradient" 
-                style={{ background: filter === '待處理' ? '#ff4d4f' : filter === '處理中' ? '#52c41a' : '#1890ff' }}
-                onClick={() => updateStatus(order.id, filter === '待處理' ? '處理中' : '已完成')}>
-                {filter === '待處理' ? '接單製作' : filter === '處理中' ? '出餐完成' : '歸檔'}
-              </button>
-            </div>
+
+            {/* 下半部分容器（強制貼底） */}
+<div style={{ 
+  display: 'flex', 
+  justifyContent: 'space-between', // 始終保持左右兩端對齊
+  alignItems: 'center', 
+  marginTop: '15px',
+  paddingTop: '10px',
+  borderTop: '1px solid #eee'
+}}>
+   {/* 總額始終在左側 */}
+   <span style={{ 
+     color: '#001529', 
+     fontWeight: '900', 
+     fontSize: '1.25rem'
+   }}>
+     總額 ${order.totalAmount}
+   </span>
+   
+   {/* 按鈕群組區塊 */}
+   <div className="order-btn-group" style={{ margin: 0 }}>
+    {filter === '待處理' && (
+      <>
+        <button className="btn-gradient" style={{ background: '#faad14' }} onClick={() => updateStatus(order.id, '處理中')}>接單</button>
+        <button className="btn-gradient" style={{ background: '#ff4d4f' }} onClick={() => deleteOrder(order.id)}>刪除</button>
+      </>
+    )}
+    
+    {filter === '處理中' && (
+      <>
+        <button className="btn-gradient" style={{ background: '#52c41a' }} onClick={() => updateStatus(order.id, '已完成')}>完成</button>
+        <button className="btn-gradient" style={{ background: '#8c8c8c' }} onClick={() => updateStatus(order.id, '待處理')}>回退</button>
+      </>
+    )}
+
+    {filter === '已完成' && (
+      <>
+        {/* 已完成頁面的功能按鈕 */}
+        <button className="btn-gradient" style={{ background: '#1890ff' }} onClick={() => updateStatus(order.id, '歸檔')}>歸檔</button>
+        <button className="btn-gradient" style={{ background: '#8c8c8c' }} onClick={() => updateStatus(order.id, '處理中')}>重做</button>
+      </>
+    )}
+  </div>
+</div>
           </div>
         ))}
       </div>
@@ -239,20 +297,17 @@ function OrdersView({ orders }) {
   );
 }
 
-// --- 菜單管理 ---
+// --- 菜單管理與其餘元件 ---
 function MenuView({ menuItems }) {
   const [isAdding, setIsAdding] = useState(false);
   const [newItem, setNewItem] = useState({ name: '', price: '', emoji: '🍲', category: '經典鍋物', allowMain: true, allowExtras: true });
-
   const add = async () => {
     if (!newItem.name || !newItem.price) return alert("資訊不完整");
     await addDoc(collection(db, "menu"), { ...newItem, price: Number(newItem.price), createdAt: serverTimestamp() });
     setIsAdding(false);
     setNewItem({ name: '', price: '', emoji: '🍲', category: '經典鍋物', allowMain: true, allowExtras: true });
   };
-
   const update = async (id, field, val) => await updateDoc(doc(db, "menu", id), { [field]: val });
-
   const grouped = menuItems.reduce((acc, it) => {
     const c = it.category || "未分類";
     if (!acc[c]) acc[c] = [];
@@ -263,45 +318,32 @@ function MenuView({ menuItems }) {
   return (
     <div>
       <div className="admin-section-title">
-        <span>🥘 菜單與分類配置</span>
-        <button className="btn-gradient" onClick={() => setIsAdding(!isAdding)}>{isAdding ? '關閉' : '＋ 新增餐點'}</button>
+        <span>🥘 菜單管理</span>
+        <button className="btn-gradient" style={{ background: '#1890ff' }} onClick={() => setIsAdding(!isAdding)}>{isAdding ? '關閉' : '＋ 新增'}</button>
       </div>
-
       {isAdding && (
-        <div className="glass-card" style={{ padding: '30px', marginBottom: '30px', border: '2px dashed #1890ff' }}>
-          <input placeholder="分類名稱" className="menu-edit-input" style={{ marginBottom: '20px' }} value={newItem.category} onChange={e => setNewItem({...newItem, category: e.target.value})} />
-          <div style={{ display: 'flex', gap: '15px', marginBottom: '20px' }}>
-            <input placeholder="圖示" className="menu-edit-input" style={{ width: '80px' }} value={newItem.emoji} onChange={e => setNewItem({...newItem, emoji: e.target.value})} />
-            <input placeholder="餐點名稱" className="menu-edit-input" value={newItem.name} onChange={e => setNewItem({...newItem, name: e.target.value})} />
-            <input placeholder="價格" type="number" className="menu-edit-input" style={{ width: '120px' }} value={newItem.price} onChange={e => setNewItem({...newItem, price: e.target.value})} />
+        <div className="glass-card" style={{ padding: '24px', marginBottom: '24px', border: '2px dashed #1890ff' }}>
+          <input placeholder="分類" className="menu-edit-input" style={{ marginBottom: '15px' }} value={newItem.category} onChange={e => setNewItem({...newItem, category: e.target.value})} />
+          <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
+            <input placeholder="圖" className="menu-edit-input" style={{ width: '50px' }} value={newItem.emoji} onChange={e => setNewItem({...newItem, emoji: e.target.value})} />
+            <input placeholder="品名" className="menu-edit-input" value={newItem.name} onChange={e => setNewItem({...newItem, name: e.target.value})} />
+            <input placeholder="價格" type="number" className="menu-edit-input" style={{ width: '80px' }} value={newItem.price} onChange={e => setNewItem({...newItem, price: e.target.value})} />
           </div>
-          <div style={{ display: 'flex', gap: '20px', marginBottom: '25px' }}>
-            <div className={`toggle-pill ${newItem.allowMain ? 'active' : ''}`} onClick={() => setNewItem({...newItem, allowMain: !newItem.allowMain})}>主食選擇 {newItem.allowMain ? 'ON' : 'OFF'}</div>
-            <div className={`toggle-pill ${newItem.allowExtras ? 'active' : ''}`} onClick={() => setNewItem({...newItem, allowExtras: !newItem.allowExtras})}>加料選項 {newItem.allowExtras ? 'ON' : 'OFF'}</div>
-          </div>
-          <button className="btn-gradient" style={{ width: '100%' }} onClick={add}>確認新增餐點</button>
+          <button className="btn-gradient" style={{ width: '100%', background: '#52c41a' }} onClick={add}>確認新增</button>
         </div>
       )}
-
       {Object.keys(grouped).map(cat => (
-        <div key={cat} style={{ marginBottom: '50px' }}>
-          <div className="category-header">📂 {cat}</div>
+        <div key={cat} style={{ marginBottom: '30px' }}>
+          <div style={{ background: '#001529', color: '#fff', padding: '8px 15px', borderRadius: '8px', marginBottom: '15px', display: 'inline-block' }}>{cat}</div>
           <div style={styles.grid}>
             {grouped[cat].map(item => (
-              <div key={item.id} className="glass-card" style={{ padding: '24px' }}>
-                <div style={{ display: 'flex', gap: '12px', marginBottom: '15px' }}>
-                  <input className="menu-edit-input" style={{ width: '40px', textAlign: 'center' }} value={item.emoji} onChange={e => update(item.id, 'emoji', e.target.value)} />
-                  <input className="menu-edit-input" style={{ fontWeight: '700' }} value={item.name} onChange={e => update(item.id, 'name', e.target.value)} />
+              <div key={item.id} className="glass-card" style={{ padding: '15px' }}>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <input className="menu-edit-input" style={{ width: '35px' }} value={item.emoji} onChange={e => update(item.id, 'emoji', e.target.value)} />
+                  <input className="menu-edit-input" value={item.name} onChange={e => update(item.id, 'name', e.target.value)} />
+                  <input className="menu-edit-input" style={{ width: '60px' }} type="number" value={item.price} onChange={e => update(item.id, 'price', Number(e.target.value))} />
+                  <button onClick={() => window.confirm('下架？') && deleteDoc(doc(db, "menu", item.id))} style={{ color: 'red', border: 'none', background: 'none' }}>×</button>
                 </div>
-                <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
-                  <div className={`toggle-pill ${item.allowMain ? 'active' : ''}`} onClick={() => update(item.id, 'allowMain', !item.allowMain)}>主食</div>
-                  <div className={`toggle-pill ${item.allowExtras ? 'active' : ''}`} onClick={() => update(item.id, 'allowExtras', !item.allowExtras)}>加料</div>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontWeight: '700', color: '#f27a45' }}>$ <input className="menu-edit-input" style={{ width: '60px', borderBottom: 'none' }} type="number" value={item.price} onChange={e => update(item.id, 'price', Number(e.target.value))} /></span>
-                  <button onClick={() => window.confirm('確定下架？') && deleteDoc(doc(db, "menu", item.id))} style={{ color: '#ff4d4f', border: 'none', background: 'none', cursor: 'pointer', fontWeight: '600' }}>下架</button>
-                </div>
-                <input className="menu-edit-input" style={{ fontSize: '11px', color: '#aaa', marginTop: '10px' }} value={item.category} onChange={e => update(item.id, 'category', e.target.value)} />
               </div>
             ))}
           </div>
@@ -311,40 +353,34 @@ function MenuView({ menuItems }) {
   );
 }
 
-// --- 通用配置 (主食/加料) ---
 function DynamicConfigView({ title, collectionName, data, hasPrice = false, placeholder }) {
   const [isAdding, setIsAdding] = useState(false);
   const [newItem, setNewItem] = useState({ name: '', price: 0, icon: '✨' });
-  
   const add = async () => {
     if (!newItem.name) return;
     await addDoc(collection(db, collectionName), newItem);
     setNewItem({ name: '', price: 0, icon: '✨' });
     setIsAdding(false);
   };
-
   return (
-    <div style={{ marginTop: '50px' }}>
-      <div className="admin-section-title">
-        <span>{title}</span>
-        <button className="btn-gradient" style={{ background: '#52c41a' }} onClick={() => setIsAdding(!isAdding)}>{isAdding ? '取消' : '＋ 新增'}</button>
-      </div>
+    <div style={{ marginTop: '40px' }}>
+      <div className="admin-section-title"><span>{title}</span><button className="btn-gradient" style={{ background: '#52c41a' }} onClick={() => setIsAdding(!isAdding)}>+</button></div>
       {isAdding && (
-        <div className="glass-card" style={{ padding: '24px', marginBottom: '24px' }}>
-          <div style={{ display: 'flex', gap: '15px' }}>
-            <input placeholder="圖" className="menu-edit-input" style={{ width: '60px' }} value={newItem.icon} onChange={e => setNewItem({...newItem, icon: e.target.value})} />
+        <div className="glass-card" style={{ padding: '15px', marginBottom: '15px' }}>
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <input placeholder="圖" className="menu-edit-input" style={{ width: '45px' }} value={newItem.icon} onChange={e => setNewItem({...newItem, icon: e.target.value})} />
             <input placeholder={placeholder} className="menu-edit-input" value={newItem.name} onChange={e => setNewItem({...newItem, name: e.target.value})} />
-            {hasPrice && <input placeholder="價格" type="number" className="menu-edit-input" style={{ width: '100px' }} onChange={e => setNewItem({...newItem, price: Number(e.target.value)})} />}
+            {hasPrice && <input placeholder="價" type="number" className="menu-edit-input" style={{ width: '60px' }} onChange={e => setNewItem({...newItem, price: Number(e.target.value)})} />}
+            <button className="btn-gradient" style={{ background: '#52c41a' }} onClick={add}>OK</button>
           </div>
-          <button className="btn-gradient" style={{ background: '#52c41a', width: '100%', marginTop: '20px' }} onClick={add}>確認新增</button>
         </div>
       )}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
         {data.map(item => (
-          <div key={item.id} className="glass-card" style={{ padding: '12px 20px', display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '0' }}>
-            <span style={{ fontSize: '1.1rem' }}>{item.icon} {item.name}</span>
-            {hasPrice && <span style={{ color: '#f27a45', fontWeight: '700' }}>${item.price}</span>}
-            <span onClick={() => deleteDoc(doc(db, collectionName, item.id))} style={{ color: '#ff4d4f', cursor: 'pointer', fontWeight: '900', marginLeft: '10px' }}>×</span>
+          <div key={item.id} className="glass-card" style={{ padding: '8px 15px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span>{item.icon} {item.name}</span>
+            {hasPrice && <span style={{ color: '#f27a45' }}>${item.price}</span>}
+            <span onClick={() => deleteDoc(doc(db, collectionName, item.id))} style={{ color: 'red', cursor: 'pointer' }}>×</span>
           </div>
         ))}
       </div>
@@ -352,15 +388,13 @@ function DynamicConfigView({ title, collectionName, data, hasPrice = false, plac
   );
 }
 
-// --- 統計 ---
 function AnalyticsView({ orders }) {
-  const total = orders.filter(o => o.status === '已完成').reduce((sum, o) => sum + Number(o.totalAmount || 0), 0);
+  const total = orders.filter(o => o.status === '已完成' || o.status === '歸檔').reduce((sum, o) => sum + Number(o.totalAmount || 0), 0);
   return (
     <div style={{ textAlign: 'center', padding: '60px 0' }}>
-      <div className="glass-card" style={{ padding: '60px', display: 'inline-block', minWidth: '400px', borderTop: '8px solid #52c41a' }}>
-        <h3 style={{ color: '#888', margin: '0 0 20px' }}>本期累計實收金額</h3>
-        <h1 style={{ fontSize: '4rem', color: '#001529', margin: '0 0 20px' }}>NT$ {total.toLocaleString()}</h1>
-        <div style={{ color: '#52c41a', fontWeight: '700' }}>📈 營運狀況良好</div>
+      <div className="glass-card" style={{ padding: '40px', display: 'inline-block', minWidth: '300px' }}>
+        <h3 style={{ color: '#888' }}>累計營業額</h3>
+        <h1 style={{ fontSize: '3rem', color: '#001529' }}>${total.toLocaleString()}</h1>
       </div>
     </div>
   );
