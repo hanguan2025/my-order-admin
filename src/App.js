@@ -37,7 +37,8 @@ const injectStyles = `
 
   .order-pending { border-left: 6px solid var(--danger) !important; animation: pulseRed 2s infinite; }
   .order-processing { border-left: 6px solid var(--warning) !important; }
-  .order-completed { border-left: 6px solid var(--success) !important; opacity: 0.8; }
+  .order-completed { border-left: 6px solid var(--success) !important; }
+  .order-archived { border-left: 6px solid #8c8c8c !important; opacity: 0.9; }
 
   .admin-section-title { 
     font-size: 1.4rem; font-weight: 800; color: var(--dark);
@@ -62,51 +63,24 @@ const injectStyles = `
   }
   .btn-gradient:active { transform: scale(0.95); }
 
-  /* --- 強制顏色修正的開關按鈕 --- */
-  .config-toggle-group { display: flex; gap: 8px; margin: 5px 0; }
-  
   .status-toggle {
-    padding: 6px 14px;
-    border-radius: 50px;
-    font-size: 11px;
-    font-weight: 800;
-    cursor: pointer;
-    border: 1px solid #ddd;
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    background: #f0f0f0 !important;
-    color: #999 !important;
+    padding: 6px 14px; border-radius: 50px; font-size: 11px; font-weight: 800;
+    cursor: pointer; border: 1px solid #ddd; display: flex; align-items: center;
+    gap: 4px; transition: all 0.3s; background: #f0f0f0 !important; color: #999 !important;
   }
 
-  /* 主食開啟樣式 - 強制藍色 */
   .status-toggle.toggle-main.active {
     background: linear-gradient(135deg, #007aff 0%, #005bb5 100%) !important;
-    color: white !important;
-    border-color: #007aff !important;
-    box-shadow: 0 4px 12px rgba(0, 122, 255, 0.35);
+    color: white !important; border-color: #007aff !important;
   }
 
-  /* 加料開啟樣式 - 強制綠色 */
   .status-toggle.toggle-extra.active {
     background: linear-gradient(135deg, #34c759 0%, #248a3d 100%) !important;
-    color: white !important;
-    border-color: #34c759 !important;
-    box-shadow: 0 4px 12px rgba(52, 199, 89, 0.35);
+    color: white !important; border-color: #34c759 !important;
   }
-
-  .status-toggle:active { transform: scale(0.9); }
-
-  .order-btn-group { display: flex; gap: 8px; }
-  .order-btn-group button { min-width: 80px; }
 
   .customer-badge {
     background: #e6f7ff; color: #1890ff; padding: 2px 8px; border-radius: 4px; font-size: 12px; margin-right: 5px;
-  }
-
-  @media (max-width: 600px) {
-    .order-btn-group button { font-size: 12px; padding: 8px 10px; }
   }
 `;
 
@@ -192,12 +166,14 @@ export default function AdminApp() {
       </header>
       <div style={styles.dropdownMenu(isMenuOpen)}>
         <div style={styles.menuItem(activeTab === 'orders')} onClick={() => {setActiveTab('orders'); setIsMenuOpen(false);}}>📋 訂單監控</div>
+        <div style={styles.menuItem(activeTab === 'history')} onClick={() => {setActiveTab('history'); setIsMenuOpen(false);}}>📜 歷史歸檔</div>
         <div style={styles.menuItem(activeTab === 'menu_all')} onClick={() => {setActiveTab('menu_all'); setIsMenuOpen(false);}}>🍴 菜單管理</div>
         <div style={styles.menuItem(activeTab === 'analytics')} onClick={() => {setActiveTab('analytics'); setIsMenuOpen(false);}}>📊 銷售統計</div>
         <div style={{ ...styles.menuItem(false), color: '#ff4d4f', borderTop: '1px solid #333' }} onClick={() => setIsLoggedIn(false)}>🚪 登出系統</div>
       </div>
       <main style={styles.main}>
         {activeTab === 'orders' && <OrdersView orders={orders} />}
+        {activeTab === 'history' && <HistoryView orders={orders} />}
         {activeTab === 'menu_all' && (
           <>
             <MenuView menuItems={menuItems} />
@@ -207,6 +183,73 @@ export default function AdminApp() {
         )}
         {activeTab === 'analytics' && <AnalyticsView orders={orders} />}
       </main>
+    </div>
+  );
+}
+
+// --- 訂單卡片核心組件 ---
+function OrderCard({ order, filter, updateStatus, deleteOrder, isReadOnly = false }) {
+  return (
+    <div className={`glass-card ${filter === '待處理' ? 'order-pending' : filter === '處理中' ? 'order-processing' : filter === '已完成' ? 'order-completed' : 'order-archived'}`} 
+      style={{ padding: '20px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: '320px' }}>
+      
+      <div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
+          <div>
+            <div style={{ fontSize: '1.4rem', fontWeight: '800' }}>🪑 桌號：{order.tableNum}</div>
+            <div style={{ fontSize: '0.85rem', color: '#666' }}>
+              <span className="customer-badge">{order.customerName}</span>
+              {order.phone}
+            </div>
+          </div>
+          <div style={{ textAlign: 'right', fontSize: '11px', color: '#999' }}>
+             <div>訂單: {order.createdAt?.toDate().toLocaleDateString()}</div>
+             <div>{order.createdAt?.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+          </div>
+        </div>
+
+        <div style={{ background: '#f8f9fa', padding: '12px', borderRadius: '10px', fontSize: '0.9rem' }}>
+          <div style={{ marginBottom: '8px', color: '#888', fontSize: '0.8rem', borderBottom: '1px solid #ddd', paddingBottom: '4px' }}>
+            💳 {order.paymentMethod || '現金支付'}
+          </div>
+          {order.items?.map((it, i) => (
+            <div key={i} style={{ borderBottom: i === order.items.length - 1 ? 'none' : '1px dashed #eee', padding: '6px 0' }}>
+              <strong>{it.emoji || '🍲'} {it.name} x1</strong> 
+              <span style={{ float: 'right', color: '#f27a45', fontWeight: 'bold' }}>${it.finalPrice}</span>
+              <div style={{ fontSize: '11px', color: '#666', marginTop: '2px' }}>
+                🍜 {it.main || '無'} | ➕ {it.extras?.map(e => e.name).join(', ') || '無'}
+              </div>
+            </div>
+          ))}
+          {order.note && <div style={{ marginTop: '10px', color: '#d48806', fontSize: '12px', borderTop: '1px solid #ddd', paddingTop: '5px' }}>📝 備註：{order.note}</div>}
+        </div>
+      </div>
+
+      <div style={{ marginTop: '20px', paddingTop: '15px', borderTop: '1px solid #eee', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '15px' }}>
+        <div style={{ fontWeight: '900', fontSize: '1.4rem', color: '#001529' }}>總額 ${order.totalAmount}</div>
+        {!isReadOnly && (
+          <div style={{ display: 'flex', gap: '8px' }}>
+            {filter === '待處理' && (
+              <>
+                <button className="btn-gradient" style={{ background: '#faad14', minWidth: '80px' }} onClick={() => updateStatus(order.id, '處理中')}>接單</button>
+                <button className="btn-gradient" style={{ background: '#ff4d4f', minWidth: '80px' }} onClick={() => deleteOrder(order.id)}>刪除</button>
+              </>
+            )}
+            {filter === '處理中' && (
+              <>
+                <button className="btn-gradient" style={{ background: '#52c41a', minWidth: '80px' }} onClick={() => updateStatus(order.id, '已完成')}>完成</button>
+                <button className="btn-gradient" style={{ background: '#8c8c8c', minWidth: '80px' }} onClick={() => updateStatus(order.id, '待處理')}>回退</button>
+              </>
+            )}
+            {filter === '已完成' && (
+              <>
+                <button className="btn-gradient" style={{ background: '#1890ff', minWidth: '80px' }} onClick={() => updateStatus(order.id, '歸檔')}>歸檔</button>
+                <button className="btn-gradient" style={{ background: '#8c8c8c', minWidth: '80px' }} onClick={() => updateStatus(order.id, '處理中')}>退回</button>
+              </>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -225,39 +268,38 @@ function OrdersView({ orders }) {
           </div>
         ))}
       </div>
-      <div style={{ ...styles.grid, alignItems: 'stretch', gridAutoRows: '1fr' }}>
+      <div style={styles.grid}>
         {orders.filter(o => o.status === filter).map(order => (
-          <div key={order.id} className={`glass-card ${filter === '待處理' ? 'order-pending' : filter === '處理中' ? 'order-processing' : 'order-completed'}`} style={{ padding: '20px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: '300px' }}>
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
-                <div>
-                  <div style={{ fontSize: '1.4rem', fontWeight: '800' }}>🪑 桌號：{order.tableNum}</div>
-                  <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '4px' }}><span className="customer-badge">{order.customerName}</span> {order.phone}</div>
-                </div>
-                <span style={{ fontSize: '12px', color: '#999' }}>{order.createdAt?.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) || '--:--'}</span>
-              </div>
-              <div style={{ background: '#f0f2f5', padding: '12px', borderRadius: '10px', fontSize: '0.95rem', marginBottom: '10px' }}>
-                <div style={{ marginBottom: '8px', color: '#888', fontSize: '0.8rem', borderBottom: '1px solid #ddd', paddingBottom: '4px' }}>💳 {order.paymentMethod || '未指定'}</div>
-                {order.items?.map((it, i) => (
-                  <div key={i} style={{ padding: '6px 0', borderBottom: i === order.items.length - 1 ? 'none' : '1px dashed #ccc' }}>
-                    <div style={{ fontWeight: '700' }}>{it.emoji} {it.name} <span style={{ float: 'right', color: '#f27a45' }}>${it.finalPrice}</span></div>
-                    <div style={{ fontSize: '12px', color: '#666', marginTop: '3px' }}>🍜 {it.main || '無'} | ➕ {it.extras?.map(e => e.name).join(', ') || '無'}</div>
-                  </div>
-                ))}
-                {order.note && <div style={{ marginTop: '10px', color: '#d48806', fontSize: '13px', borderTop: '1px solid #ddd', paddingTop: '5px' }}>📝 備註：{order.note}</div>}
-              </div>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '15px', paddingTop: '10px', borderTop: '1px solid #eee' }}>
-              <span style={{ color: '#001529', fontWeight: '900', fontSize: '1.25rem' }}>總額 ${order.totalAmount}</span>
-              <div className="order-btn-group">
-                {filter === '待處理' && ( <> <button className="btn-gradient" style={{ background: '#faad14' }} onClick={() => updateStatus(order.id, '處理中')}>接單</button> <button className="btn-gradient" style={{ background: '#ff4d4f' }} onClick={() => deleteOrder(order.id)}>刪除</button> </> )}
-                {filter === '處理中' && ( <> <button className="btn-gradient" style={{ background: '#52c41a' }} onClick={() => updateStatus(order.id, '已完成')}>完成</button> <button className="btn-gradient" style={{ background: '#8c8c8c' }} onClick={() => updateStatus(order.id, '待處理')}>回退</button> </> )}
-                {filter === '已完成' && ( <> <button className="btn-gradient" style={{ background: '#1890ff' }} onClick={() => updateStatus(order.id, '歸檔')}>歸檔</button> <button className="btn-gradient" style={{ background: '#8c8c8c' }} onClick={() => updateStatus(order.id, '處理中')}>重做</button> </> )}
-              </div>
-            </div>
-          </div>
+          <OrderCard key={order.id} order={order} filter={filter} updateStatus={updateStatus} deleteOrder={deleteOrder} />
         ))}
       </div>
+    </div>
+  );
+}
+
+function HistoryView({ orders }) {
+  const [searchPhone, setSearchPhone] = useState("");
+  const archivedOrders = orders.filter(o => o.status === '歸檔');
+  const filtered = archivedOrders.filter(o => o.phone?.includes(searchPhone));
+
+  return (
+    <div>
+      <div className="admin-section-title">
+        <span>📜 歷史歸檔紀錄</span>
+        <input 
+          placeholder="🔍 輸入電話查詢歷史..." 
+          className="menu-edit-input" 
+          style={{ width: '250px', background: '#fff', borderRadius: '8px', padding: '10px' }}
+          value={searchPhone}
+          onChange={(e) => setSearchPhone(e.target.value)}
+        />
+      </div>
+      <div style={styles.grid}>
+        {filtered.map(order => (
+          <OrderCard key={order.id} order={order} filter="歸檔" isReadOnly={true} />
+        ))}
+      </div>
+      {filtered.length === 0 && <div style={{ textAlign: 'center', color: '#999', marginTop: '50px' }}>目前沒有符合搜尋條件的歸檔訂單</div>}
     </div>
   );
 }
@@ -318,7 +360,7 @@ function MenuView({ menuItems }) {
 
           <div style={{ display: 'flex', gap: '15px', marginBottom: '15px', alignItems: 'center' }}>
             <label style={{ fontSize: '13px', color: '#666', fontWeight: '700' }}>功能開放：</label>
-            <div className="config-toggle-group">
+            <div className="config-toggle-group" style={{ display: 'flex', gap: '10px' }}>
               <button className={`status-toggle toggle-main ${newItem.allowMain ? 'active' : ''}`} onClick={() => setNewItem({...newItem, allowMain: !newItem.allowMain})}>
                 {newItem.allowMain ? '🍚 主食已開' : '⚪ 主食已關'}
               </button>
@@ -328,7 +370,7 @@ function MenuView({ menuItems }) {
             </div>
           </div>
 
-          <input placeholder="品項描述 (例如: 湯頭濃郁、不辣...)" className="menu-edit-input" style={{ marginBottom: '20px' }} value={newItem.description} onChange={e => setNewItem({...newItem, description: e.target.value})} />
+          <input placeholder="品項描述" className="menu-edit-input" style={{ marginBottom: '20px' }} value={newItem.description} onChange={e => setNewItem({...newItem, description: e.target.value})} />
           <button className="btn-gradient" style={{ width: '100%', background: '#52c41a' }} onClick={add}>確認新增到菜單</button>
         </div>
       )}
@@ -337,9 +379,7 @@ function MenuView({ menuItems }) {
         <div key={cat} style={{ marginBottom: '40px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '15px' }}>
              <div style={{ background: '#001529', color: '#fff', padding: '8px 20px', borderRadius: '8px', fontSize: '1rem', fontWeight: 'bold' }}>{cat}</div>
-             <span style={{ fontSize: '12px', color: '#999' }}>({grouped[cat].length} 個品項)</span>
           </div>
-
           <div style={styles.grid}>
             {grouped[cat].map(item => (
               <div key={item.id} className="glass-card" style={{ padding: '15px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -349,7 +389,6 @@ function MenuView({ menuItems }) {
                   <input className="menu-edit-input" style={{ width: '60px' }} type="number" value={item.price} onChange={e => update(item.id, 'price', Number(e.target.value))} />
                   <button onClick={() => window.confirm('確定下架？') && deleteDoc(doc(db, "menu", item.id))} style={{ color: 'red', border: 'none', background: 'none', cursor: 'pointer' }}>×</button>
                 </div>
-                
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                   <button className={`status-toggle toggle-main ${item.allowMain ? 'active' : ''}`} onClick={() => update(item.id, 'allowMain', !item.allowMain)}>
                     {item.allowMain ? '🍚 主食' : '⚪ 關閉'}
@@ -357,13 +396,6 @@ function MenuView({ menuItems }) {
                   <button className={`status-toggle toggle-extra ${item.allowExtras ? 'active' : ''}`} onClick={() => update(item.id, 'allowExtras', !item.allowExtras)}>
                     {item.allowExtras ? '🥩 加料' : '⚪ 關閉'}
                   </button>
-                  <input 
-                    placeholder="點擊編輯描述..." 
-                    className="menu-edit-input" 
-                    style={{ fontSize: '0.8rem', color: '#666', flex: 1 }} 
-                    value={item.description || ''} 
-                    onChange={e => update(item.id, 'description', e.target.value)} 
-                  />
                 </div>
               </div>
             ))}
@@ -406,7 +438,7 @@ function DynamicConfigView({ title, collectionName, data, hasPrice = false, plac
             {hasPrice && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <span style={{ color: '#f27a45', fontWeight: 'bold' }}>$</span>
-                <input type="number" className="price-edit-mini" defaultValue={item.price} onBlur={(e) => updatePrice(item.id, e.target.value)} onKeyPress={(e) => e.key === 'Enter' && updatePrice(item.id, e.target.value)} />
+                <input type="number" className="price-edit-mini" defaultValue={item.price} onBlur={(e) => updatePrice(item.id, e.target.value)} />
               </div>
             )}
             <span onClick={() => window.confirm('刪除？') && deleteDoc(doc(db, collectionName, item.id))} style={{ color: '#ff4d4f', cursor: 'pointer', marginLeft: '5px' }}>×</span>
