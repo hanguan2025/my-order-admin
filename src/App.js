@@ -419,7 +419,6 @@ function MenuView({ menuItems }) {
     return acc;
   }, {});
 
-  return (
     <div>
       <div className="admin-section-title">
         <div style={{ flex: 1 }}></div>
@@ -510,7 +509,7 @@ function MenuView({ menuItems }) {
         ))}
       </DndContext>
     </div>
-  );
+  ;
 }
 
 // 需確保檔案上方有 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
