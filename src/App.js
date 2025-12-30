@@ -3,148 +3,48 @@ import { db } from './firebase';
 import { 
   collection, onSnapshot, query, orderBy, 
   updateDoc, doc, deleteDoc, addDoc, serverTimestamp,
-  writeBatch // <-- 新增這個
+  writeBatch 
 } from 'firebase/firestore';
 
-// --- 新增以下這些拖拽功能必備的引用 ---
+// --- 拖拽功能引用 ---
 import { 
-  DndContext, 
-  closestCenter, 
-  PointerSensor, 
-  useSensor, 
-  useSensors 
+  DndContext, closestCenter, PointerSensor, useSensor, useSensors 
 } from '@dnd-kit/core';
 import { 
-  SortableContext, 
-  rectSortingStrategy, 
-  arrayMove, 
-  useSortable 
+  SortableContext, rectSortingStrategy, arrayMove, useSortable 
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
-// --- 進階 CSS 動效與美化樣式 ---
+// --- CSS 樣式注入 ---
 const injectStyles = `
-  :root {
-    --primary: #1890ff;
-    --success: #52c41a;
-    --warning: #faad14;
-    --danger: #ff4d4f;
-    --dark: #001529;
-    --bg: #f4f7fe;
-    --brand-orange: #f27a45;
+  :root { --primary: #1890ff; --success: #52c41a; --warning: #faad14; --danger: #ff4d4f; --dark: #001529; --bg: #f4f7fe; --brand-orange: #f27a45; }
+  body { background-color: var(--bg); margin: 0; font-family: "PingFang TC", sans-serif; }
+  .glass-card { 
+    background: rgba(255, 255, 255, 0.95); border-radius: 16px; border: 1px solid rgba(255, 255, 255, 0.3);
+    box-shadow: 0 8px 32px rgba(31, 38, 135, 0.07); transition: transform 0.2s;
+    touch-action: none; /* 重要：防止手機拖動時網頁捲動 */
   }
-
-  @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-
-  @keyframes pulseRed {
-    0% { box-shadow: 0 0 0 0 rgba(255, 77, 79, 0.4); }
-    70% { box-shadow: 0 0 0 10px rgba(255, 77, 79, 0); }
-    100% { box-shadow: 0 0 0 0 rgba(255, 77, 79, 0); }
-  }
-
-  body { background-color: var(--bg); margin: 0; font-family: "PingFang TC", "Microsoft JhengHei", sans-serif; }
-  
-  .glass-card {
-    background: rgba(255, 255, 255, 0.95);
-    backdrop-filter: blur(10px);
-    border-radius: 16px;
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    box-shadow: 0 8px 32px rgba(31, 38, 135, 0.07);
-    transition: transform 0.2s, box-shadow 0.2s;
-  }
-  
-  .glass-card:hover { transform: translateY(-4px); box-shadow: 0 12px 40px rgba(31, 38, 135, 0.12); }
-
-  .order-pending { border-left: 6px solid var(--danger) !important; animation: pulseRed 2s infinite; }
-  .order-processing { border-left: 6px solid var(--warning) !important; }
-  .order-completed { border-left: 6px solid var(--success) !important; }
-  .order-archived { border-left: 6px solid #8c8c8c !important; opacity: 0.9; }
-
-  .admin-section-title { 
-    font-size: 1.4rem; font-weight: 800; color: var(--dark);
-    margin: 20px 0 20px; display: flex; align-items: center; justify-content: space-between;
-  }
-
-  .menu-edit-input { 
-    border: 1px solid transparent; border-bottom: 2px solid #eee; 
-    transition: 0.3s; padding: 8px 4px; background: transparent; width: 100%; font-size: 1rem;
-  }
-  .menu-edit-input:focus { border-bottom: 2px solid var(--primary); outline: none; background: #f0f7ff; }
-
-  .btn-gradient {
-    color: white; border: none; padding: 10px 16px; border-radius: 8px;
-    font-weight: 600; cursor: pointer; transition: 0.3s; 
-    font-size: 0.9rem; text-align: center;
-  }
-  .btn-gradient:active { transform: scale(0.95); }
-
-  .customer-badge {
-    background: #e6f7ff; color: #1890ff; padding: 2px 8px; border-radius: 4px; font-size: 12px; margin-right: 5px;
-  }
-
-  .analytics-tabs {
-    display: flex; background: #e9ecef; padding: 5px; border-radius: 12px; width: fit-content;
-    box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);
-  }
-  .view-tab {
-    padding: 8px 20px; border-radius: 8px; cursor: pointer; border: none;
-    font-weight: 700; font-size: 0.9rem; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
-    color: #7a7a7a; background: transparent;
-  }
-  .view-tab:hover { color: var(--brand-orange); }
-  .view-tab.active { 
-    background: #fff; color: var(--brand-orange); 
-    box-shadow: 0 4px 12px rgba(0,0,0,0.1); transform: scale(1.02);
-  }
-
-  .date-picker-input {
-    background: #fff; border: 1px solid #ddd; padding: 10px 15px; border-radius: 10px;
-    font-weight: 600; color: var(--dark); outline: none; transition: 0.3s; cursor: pointer;
-  }
-  .date-picker-input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(24,144,255,0.1); }
-
-  .chart-bar-container {
-    width: 100%; height: 14px; background: #f0f0f0; border-radius: 20px; overflow: hidden; margin-top: 10px;
-  }
-  .chart-bar-fill {
-    height: 100%; background: linear-gradient(90deg, #f27a45, #ffbb96);
-    border-radius: 20px; transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);
-  }
-
-  .status-toggle {
-    padding: 6px 14px; border-radius: 50px; font-size: 11px; font-weight: 800;
-    cursor: pointer; border: 1px solid #ddd; display: flex; align-items: center;
-    gap: 4px; transition: all 0.3s; background: #f0f0f0 !important; color: #999 !important;
-  }
+  .admin-section-title { font-size: 1.4rem; font-weight: 800; color: var(--dark); margin: 20px 0; display: flex; align-items: center; justify-content: space-between; }
+  .menu-edit-input { border: 1px solid transparent; border-bottom: 2px solid #eee; transition: 0.3s; padding: 8px 4px; background: transparent; width: 100%; font-size: 1rem; }
+  .btn-gradient { color: white; border: none; padding: 10px 16px; border-radius: 8px; font-weight: 600; cursor: pointer; background: var(--primary); }
+  .status-toggle { padding: 6px 14px; border-radius: 50px; font-size: 11px; font-weight: 800; cursor: pointer; border: 1px solid #ddd; background: #f0f0f0; color: #999; }
   .status-toggle.active { background: var(--primary) !important; color: white !important; }
+  .analytics-tabs { display: flex; background: #e9ecef; padding: 5px; border-radius: 12px; }
+  .view-tab { padding: 8px 20px; border-radius: 8px; cursor: pointer; border: none; color: #7a7a7a; background: transparent; }
+  .view-tab.active { background: #fff; color: var(--brand-orange); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+  .chart-bar-container { width: 100%; height: 14px; background: #f0f0f0; border-radius: 20px; overflow: hidden; margin-top: 10px; }
+  .chart-bar-fill { height: 100%; background: linear-gradient(90deg, #f27a45, #ffbb96); border-radius: 20px; }
 `;
 
 const styles = {
   layout: { minHeight: '100vh' },
   main: { padding: '100px 24px 60px', maxWidth: '1240px', margin: '0 auto' },
-  topNav: { 
-    position: 'fixed', top: 0, left: 0, right: 0, height: '70px', 
-    backgroundColor: 'rgba(255,255,255,0.8)', backdropFilter: 'blur(10px)',
-    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-    padding: '0 30px', zIndex: 1000, borderBottom: '1px solid #eee' 
-  },
+  topNav: { position: 'fixed', top: 0, left: 0, right: 0, height: '70px', backgroundColor: 'rgba(255,255,255,0.8)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 30px', zIndex: 1000, borderBottom: '1px solid #eee' },
   hamburgerBtn: { width: '45px', height: '45px', backgroundColor: '#001529', color: '#fff', borderRadius: '10px', border: 'none', cursor: 'pointer', fontSize: '20px' },
-  dropdownMenu: (isOpen) => ({ 
-    position: 'fixed', top: isOpen ? '80px' : '-500px', right: '30px', width: '240px', 
-    backgroundColor: '#001529', color: '#fff', zIndex: 1000, transition: '0.4s cubic-bezier(0.4, 0, 0.2, 1)', 
-    borderRadius: '16px', overflow: 'hidden', boxShadow: '0 10px 30px rgba(0,0,0,0.2)' 
-  }),
-  menuItem: (active) => ({ padding: '18px 24px', cursor: 'pointer', backgroundColor: active ? '#1890ff' : 'transparent', display: 'flex', alignItems: 'center', gap: '12px', transition: '0.2s' }),
+  dropdownMenu: (isOpen) => ({ position: 'fixed', top: isOpen ? '80px' : '-500px', right: '30px', width: '240px', backgroundColor: '#001529', color: '#fff', zIndex: 1000, transition: '0.4s', borderRadius: '16px', overflow: 'hidden' }),
+  menuItem: (active) => ({ padding: '18px 24px', cursor: 'pointer', backgroundColor: active ? '#1890ff' : 'transparent', display: 'flex', alignItems: 'center', gap: '12px' }),
   grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '24px' },
-  statusTab: (active, color) => ({ 
-    flex: 1, padding: '16px', borderRadius: '14px', cursor: 'pointer', textAlign: 'center', 
-    backgroundColor: active ? color : '#fff', color: active ? '#fff' : '#555', 
-    fontWeight: '700', transition: '0.3s', boxShadow: active ? '0 8px 20px rgba(0,0,0,0.1)' : 'none',
-    fontSize: '0.9rem'
-  })
+  statusTab: (active, color) => ({ flex: 1, padding: '16px', borderRadius: '14px', cursor: 'pointer', textAlign: 'center', backgroundColor: active ? color : '#fff', color: active ? '#fff' : '#555', fontWeight: '700' })
 };
 
 export default function AdminApp() {
@@ -156,16 +56,9 @@ export default function AdminApp() {
   const [menuItems, setMenuItems] = useState([]);
   const [mains, setMains] = useState([]);
   const [extras, setExtras] = useState([]);
-  
   const audioRef = useRef(null);
 
-  // 定義頁首動態標題對照表
-  const tabNames = {
-    'orders': '📋 訂單監控',
-    'history': '📜 歷史歸檔',
-    'menu_all': '🍴 菜單管理',
-    'analytics': '📊 銷售統計'
-  };
+  const tabNames = { 'orders': '📋 訂單監控', 'history': '📜 歷史歸檔', 'menu_all': '🍴 菜單管理', 'analytics': '📊 銷售統計' };
 
   useEffect(() => {
     const styleTag = document.createElement("style");
@@ -178,24 +71,13 @@ export default function AdminApp() {
     if (!isLoggedIn) return;
     const unsubOrders = onSnapshot(query(collection(db, "orders"), orderBy("createdAt", "desc")), (s) => {
       s.docChanges().forEach(change => {
-        if (change.type === "added" && change.doc.data().status === "待處理") {
-          audioRef.current?.play().catch(() => {});
-        }
+        if (change.type === "added" && change.doc.data().status === "待處理") audioRef.current?.play().catch(() => {});
       });
       setOrders(s.docs.map(d => ({...d.data(), id: d.id})));
     });
-    // 將原本的 orderBy("category", "asc") 改掉，或多加一個順序
-const unsubMenu = onSnapshot(query(collection(db, "menu"), orderBy("sortOrder", "asc")), (s) => 
-  setMenuItems(s.docs.map(d => ({...d.data(), id: d.id})))
-);
-    // 搜尋這兩行並改寫
-const unsubMains = onSnapshot(query(collection(db, "mains"), orderBy("sortOrder", "asc")), (s) => 
-  setMains(s.docs.map(d => ({...d.data(), id: d.id})))
-);
-
-const unsubExtras = onSnapshot(query(collection(db, "extras"), orderBy("sortOrder", "asc")), (s) => 
-  setExtras(s.docs.map(d => ({...d.data(), id: d.id})))
-);
+    const unsubMenu = onSnapshot(query(collection(db, "menu"), orderBy("sortOrder", "asc")), (s) => setMenuItems(s.docs.map(d => ({...d.data(), id: d.id}))));
+    const unsubMains = onSnapshot(query(collection(db, "mains"), orderBy("sortOrder", "asc")), (s) => setMains(s.docs.map(d => ({...d.data(), id: d.id}))));
+    const unsubExtras = onSnapshot(query(collection(db, "extras"), orderBy("sortOrder", "asc")), (s) => setExtras(s.docs.map(d => ({...d.data(), id: d.id}))));
     return () => { unsubOrders(); unsubMenu(); unsubMains(); unsubExtras(); };
   }, [isLoggedIn]);
 
@@ -205,9 +87,9 @@ const unsubExtras = onSnapshot(query(collection(db, "extras"), orderBy("sortOrde
     return (
       <div style={{ height: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center', background: 'linear-gradient(135deg, #001529 0%, #003a8c 100%)' }}>
         <div className="glass-card" style={{ padding: '40px', textAlign: 'center', width: '320px' }}>
-          <h2 style={{ margin: '0 0 30px', color: '#001529' }}>🥘 韓館管理系統</h2>
+          <h2 style={{ color: '#001529' }}>🥘 韓館管理系統</h2>
           <input type="password" placeholder="管理員密碼" className="menu-edit-input" style={{ marginBottom: '30px', textAlign: 'center' }} value={password} onChange={(e) => setPassword(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && handleLogin()} />
-          <button className="btn-gradient" style={{ width: '100%', background: '#1890ff' }} onClick={handleLogin}>立即登入</button>
+          <button className="btn-gradient" style={{ width: '100%' }} onClick={handleLogin}>立即登入</button>
         </div>
       </div>
     );
@@ -216,17 +98,14 @@ const unsubExtras = onSnapshot(query(collection(db, "extras"), orderBy("sortOrde
   return (
     <div style={styles.layout}>
       <header style={styles.topNav}>
-        <div style={{ fontSize: '1.4rem', fontWeight: '900', color: '#001529' }}>
-            {tabNames[activeTab] || 'K-FOOD ADMIN'}
-        </div>
+        <div style={{ fontSize: '1.4rem', fontWeight: '900' }}>{tabNames[activeTab]}</div>
         <button style={styles.hamburgerBtn} onClick={() => setIsMenuOpen(!isMenuOpen)}>☰</button>
       </header>
       <div style={styles.dropdownMenu(isMenuOpen)}>
-        <div style={styles.menuItem(activeTab === 'orders')} onClick={() => {setActiveTab('orders'); setIsMenuOpen(false);}}>📋 訂單監控</div>
-        <div style={styles.menuItem(activeTab === 'history')} onClick={() => {setActiveTab('history'); setIsMenuOpen(false);}}>📜 歷史歸檔</div>
-        <div style={styles.menuItem(activeTab === 'menu_all')} onClick={() => {setActiveTab('menu_all'); setIsMenuOpen(false);}}>🍴 菜單管理</div>
-        <div style={styles.menuItem(activeTab === 'analytics')} onClick={() => {setActiveTab('analytics'); setIsMenuOpen(false);}}>📊 銷售統計</div>
-        <div style={{ ...styles.menuItem(false), color: '#ff4d4f', borderTop: '1px solid #333' }} onClick={() => setIsLoggedIn(false)}>🚪 登出系統</div>
+        {['orders', 'history', 'menu_all', 'analytics'].map(tab => (
+          <div key={tab} style={styles.menuItem(activeTab === tab)} onClick={() => {setActiveTab(tab); setIsMenuOpen(false);}}>{tabNames[tab]}</div>
+        ))}
+        <div style={{ ...styles.menuItem(false), color: '#ff4d4f' }} onClick={() => setIsLoggedIn(false)}>🚪 登出</div>
       </div>
       <main style={styles.main}>
         {activeTab === 'orders' && <OrdersView orders={orders} />}
@@ -367,6 +246,7 @@ function HistoryView({ orders }) {
     </div>
   );
 }
+
 function MenuView({ menuItems }) {
   const [isAdding, setIsAdding] = useState(false);
   const [newCatName, setNewCatName] = useState("");
@@ -619,7 +499,11 @@ const handleDragEnd = async (event) => {
 // 拖拽需要的子元件
 function SortableItem(props) {
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: props.id });
-  const style = { transform: CSS.Transform.toString(transform), transition };
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    touchAction: 'none' // 重要：讓手機知道這是拖拽區，不要捲動網頁
+  };
   return (
     <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
       {props.children}
