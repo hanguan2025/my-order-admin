@@ -2,8 +2,25 @@ import React, { useState, useEffect, useRef } from 'react';
 import { db } from './firebase';
 import { 
   collection, onSnapshot, query, orderBy, 
-  updateDoc, doc, deleteDoc, addDoc, serverTimestamp 
+  updateDoc, doc, deleteDoc, addDoc, serverTimestamp,
+  writeBatch // <-- 新增這個
 } from 'firebase/firestore';
+
+// --- 新增以下這些拖拽功能必備的引用 ---
+import { 
+  DndContext, 
+  closestCenter, 
+  PointerSensor, 
+  useSensor, 
+  useSensors 
+} from '@dnd-kit/core';
+import { 
+  SortableContext, 
+  rectSortingStrategy, 
+  arrayMove, 
+  useSortable 
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 // --- 進階 CSS 動效與美化樣式 ---
 const injectStyles = `
@@ -167,9 +184,18 @@ export default function AdminApp() {
       });
       setOrders(s.docs.map(d => ({...d.data(), id: d.id})));
     });
-    const unsubMenu = onSnapshot(query(collection(db, "menu"), orderBy("category", "asc")), (s) => setMenuItems(s.docs.map(d => ({...d.data(), id: d.id}))));
-    const unsubMains = onSnapshot(collection(db, "mains"), (s) => setMains(s.docs.map(d => ({...d.data(), id: d.id}))));
-    const unsubExtras = onSnapshot(collection(db, "extras"), (s) => setExtras(s.docs.map(d => ({...d.data(), id: d.id}))));
+    // 將原本的 orderBy("category", "asc") 改掉，或多加一個順序
+const unsubMenu = onSnapshot(query(collection(db, "menu"), orderBy("sortOrder", "asc")), (s) => 
+  setMenuItems(s.docs.map(d => ({...d.data(), id: d.id})))
+);
+    // 搜尋這兩行並改寫
+const unsubMains = onSnapshot(query(collection(db, "mains"), orderBy("sortOrder", "asc")), (s) => 
+  setMains(s.docs.map(d => ({...d.data(), id: d.id})))
+);
+
+const unsubExtras = onSnapshot(query(collection(db, "extras"), orderBy("sortOrder", "asc")), (s) => 
+  setExtras(s.docs.map(d => ({...d.data(), id: d.id})))
+);
     return () => { unsubOrders(); unsubMenu(); unsubMains(); unsubExtras(); };
   }, [isLoggedIn]);
 
@@ -348,18 +374,44 @@ function MenuView({ menuItems }) {
   const [newCatName, setNewCatName] = useState("");
   const [newItem, setNewItem] = useState({ 
     name: '', price: '', emoji: '🍲', category: '經典鍋物', 
-    description: '', allowMain: true, allowExtras: true 
+    description: '', allowMain: true, allowExtras: true,
+    allowNote: true 
   });
+
+  // 設定感應器
+  const sensors = useSensors(useSensor(PointerSensor));
 
   const add = async () => {
     if (!newItem.name || !newItem.price) return alert("品名與價格為必填");
-    await addDoc(collection(db, "menu"), { ...newItem, price: Number(newItem.price), createdAt: serverTimestamp() });
+    await addDoc(collection(db, "menu"), { 
+      ...newItem, 
+      price: Number(newItem.price), 
+      sortOrder: menuItems.length,
+      createdAt: serverTimestamp() 
+    });
     setIsAdding(false);
-    setNewItem({ ...newItem, name: '', price: '', description: '', allowMain: true, allowExtras: true });
+    setNewItem({ ...newItem, name: '', price: '', description: '', allowMain: true, allowExtras: true, allowNote: true });
   };
 
   const update = async (id, field, val) => await updateDoc(doc(db, "menu", id), { [field]: val });
 
+  // 排序處理邏輯
+  const handleDragEnd = async (event) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = menuItems.findIndex((i) => i.id === active.id);
+    const newIndex = menuItems.findIndex((i) => i.id === over.id);
+    const newList = arrayMove(menuItems, oldIndex, newIndex);
+
+    const batch = writeBatch(db);
+    newList.forEach((item, idx) => {
+      batch.update(doc(db, "menu", item.id), { sortOrder: idx });
+    });
+    await batch.commit();
+  };
+
+  // 將資料按分類分組
   const grouped = menuItems.reduce((acc, it) => {
     const c = it.category || "未分類";
     if (!acc[c]) acc[c] = [];
@@ -370,13 +422,13 @@ function MenuView({ menuItems }) {
   return (
     <div>
       <div className="admin-section-title">
-        {/* 移除 🍴 菜單管理 標題 */}
         <div style={{ flex: 1 }}></div>
         <button className="btn-gradient" style={{ background: '#1890ff' }} onClick={() => setIsAdding(!isAdding)}>
           {isAdding ? '關閉' : '＋ 新增品項/分類'}
         </button>
       </div>
 
+      {/* 新增品項區塊 */}
       {isAdding && (
         <div className="glass-card" style={{ padding: '24px', marginBottom: '24px', border: '2px dashed #1890ff' }}>
           <div style={{ marginBottom: '15px' }}>
@@ -406,6 +458,9 @@ function MenuView({ menuItems }) {
               <button className={`status-toggle ${newItem.allowExtras ? 'active' : ''}`} onClick={() => setNewItem({...newItem, allowExtras: !newItem.allowExtras})}>
                 {newItem.allowExtras ? '🥩 加料已開' : '⚪ 加料已關'}
               </button>
+              <button className={`status-toggle ${newItem.allowNote ? 'active' : ''}`} onClick={() => setNewItem({...newItem, allowNote: !newItem.allowNote})} style={{ background: newItem.allowNote ? '#722ed1' : '#f0f0f0' }}>
+                {newItem.allowNote ? '📝 備註已開' : '⚪ 備註已關'}
+              </button>
             </div>
           </div>
 
@@ -414,76 +469,174 @@ function MenuView({ menuItems }) {
         </div>
       )}
 
-      {Object.keys(grouped).map(cat => (
-        <div key={cat} style={{ marginBottom: '40px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '15px' }}>
+      {/* 列表渲染區塊：使用 DndContext 包裹 */}
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        {Object.keys(grouped).map(cat => (
+          <div key={cat} style={{ marginBottom: '40px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '15px' }}>
               <div style={{ background: '#001529', color: '#fff', padding: '8px 20px', borderRadius: '8px', fontSize: '1rem', fontWeight: 'bold' }}>{cat}</div>
-          </div>
-          <div style={styles.grid}>
-            {grouped[cat].map(item => (
-              <div key={item.id} className="glass-card" style={{ padding: '15px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                <div style={{ display: 'flex', gap: '10px' }}>
-                  <input className="menu-edit-input" style={{ width: '35px' }} value={item.emoji} onChange={e => update(item.id, 'emoji', e.target.value)} />
-                  <input className="menu-edit-input" value={item.name} onChange={e => update(item.id, 'name', e.target.value)} />
-                  <input className="menu-edit-input" style={{ width: '60px' }} type="number" value={item.price} onChange={e => update(item.id, 'price', Number(e.target.value))} />
-                  <button onClick={() => window.confirm('確定下架？') && deleteDoc(doc(db, "menu", item.id))} style={{ color: 'red', border: 'none', background: 'none', cursor: 'pointer' }}>×</button>
-                </div>
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                  <button className={`status-toggle ${item.allowMain ? 'active' : ''}`} onClick={() => update(item.id, 'allowMain', !item.allowMain)}>
-                    {item.allowMain ? '🍚 主食' : '⚪ 關閉'}
-                  </button>
-                  <button className={`status-toggle ${item.allowExtras ? 'active' : ''}`} onClick={() => update(item.id, 'allowExtras', !item.allowExtras)}>
-                    {item.allowExtras ? '🥩 加料' : '⚪ 關閉'}
-                  </button>
-                </div>
+            </div>
+            
+            <SortableContext items={grouped[cat].map(i => i.id)} strategy={rectSortingStrategy}>
+              <div style={styles.grid}>
+                {grouped[cat].map(item => (
+                  <SortableItem key={item.id} id={item.id}>
+                    <div className="glass-card" style={{ padding: '15px', display: 'flex', flexDirection: 'column', gap: '10px', cursor: 'grab' }}>
+                      <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                        <span style={{ color: '#ccc' }}>⠿</span>
+                        <input className="menu-edit-input" style={{ width: '35px' }} value={item.emoji} onChange={e => update(item.id, 'emoji', e.target.value)} />
+                        <input className="menu-edit-input" value={item.name} onChange={e => update(item.id, 'name', e.target.value)} />
+                        <input className="menu-edit-input" style={{ width: '60px' }} type="number" value={item.price} onChange={e => update(item.id, 'price', Number(e.target.value))} />
+                        <button onClick={(e) => { e.stopPropagation(); window.confirm('確定下架？') && deleteDoc(doc(db, "menu", item.id)); }} style={{ color: 'red', border: 'none', background: 'none', cursor: 'pointer' }}>×</button>
+                      </div>
+                      
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        <button className={`status-toggle ${item.allowMain ? 'active' : ''}`} onClick={() => update(item.id, 'allowMain', !item.allowMain)}>
+                          {item.allowMain ? '🍚 主食' : '⚪ 關閉'}
+                        </button>
+                        <button className={`status-toggle ${item.allowExtras ? 'active' : ''}`} onClick={() => update(item.id, 'allowExtras', !item.allowExtras)}>
+                          {item.allowExtras ? '🥩 加料' : '⚪ 關閉'}
+                        </button>
+                        <button className={`status-toggle ${item.allowNote ? 'active' : ''}`} onClick={() => update(item.id, 'allowNote', !item.allowNote)} style={{ background: item.allowNote ? '#722ed1' : '#f0f0f0' }}>
+                          {item.allowNote ? '📝 備註' : '⚪ 關閉'}
+                        </button>
+                      </div>
+                    </div>
+                  </SortableItem>
+                ))}
               </div>
-            ))}
+            </SortableContext>
           </div>
-        </div>
-      ))}
+        ))}
+      </DndContext>
     </div>
   );
 }
 
+// 需確保檔案上方有 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+// 需確保檔案上方有 import { SortableContext, rectSortingStrategy, arrayMove, useSortable } from '@dnd-kit/sortable';
+// 需確保檔案上方有 import { CSS } from '@dnd-kit/utilities';
+
 function DynamicConfigView({ title, collectionName, data, hasPrice = false, placeholder }) {
   const [isAdding, setIsAdding] = useState(false);
-  const [newItem, setNewItem] = useState({ name: '', price: 0, icon: '✨' });
+  // 加入 type 欄位，方便加料區分類
+  const [newItem, setNewItem] = useState({ name: '', price: 0, icon: '✨', type: '預設' });
+  
+  const sensors = useSensors(useSensor(PointerSensor));
+
   const add = async () => {
     if (!newItem.name) return;
-    await addDoc(collection(db, collectionName), newItem);
-    setNewItem({ name: '', price: 0, icon: '✨' });
+    // 新增時自動帶入 sortOrder (排在最後面)
+    await addDoc(collection(db, collectionName), { 
+      ...newItem, 
+      sortOrder: data.length,
+      createdAt: serverTimestamp() 
+    });
+    setNewItem({ name: '', price: 0, icon: '✨', type: newItem.type });
     setIsAdding(false);
   };
+
   const updatePrice = async (id, newPrice) => {
     await updateDoc(doc(db, collectionName, id), { price: Number(newPrice) });
   };
+
+const handleDragEnd = async (event) => {
+  const { active, over } = event;
+  
+  // 如果位置沒變，就不做事
+  if (!over || active.id === over.id) return;
+
+  // 1. 算出新舊位置的順序
+  const oldIndex = data.findIndex((i) => i.id === active.id);
+  const newIndex = data.findIndex((i) => i.id === over.id);
+  
+  // 2. 重新排列記憶體中的陣列
+  const newList = arrayMove(data, oldIndex, newIndex);
+  
+  // 3. 【關鍵：同步到資料庫】
+  // 使用 writeBatch 一次性更新所有品項的 sortOrder
+  const batch = writeBatch(db); 
+  newList.forEach((item, idx) => {
+    const itemRef = doc(db, collectionName, item.id);
+    batch.update(itemRef, { sortOrder: idx });
+  });
+
+  try {
+    await batch.commit(); // 正式送出更新到 Firebase
+    console.log("排序儲存成功！");
+  } catch (error) {
+    console.error("排序儲存失敗：", error);
+  }
+};
+
+  // 根據分類(type)將資料分組 (如果是主食區沒設 type，會自動歸類在「預設」)
+  const groupedData = data.reduce((acc, item) => {
+    const t = item.type || '預設';
+    if (!acc[t]) acc[t] = [];
+    acc[t].push(item);
+    return acc;
+  }, {});
+
   return (
     <div style={{ marginTop: '40px' }}>
-      <div className="admin-section-title"><span>{title}</span><button className="btn-gradient" style={{ background: '#52c41a' }} onClick={() => setIsAdding(!isAdding)}>+</button></div>
+      <div className="admin-section-title">
+        <span>{title}</span>
+        <button className="btn-gradient" style={{ background: '#52c41a' }} onClick={() => setIsAdding(!isAdding)}>+</button>
+      </div>
+
       {isAdding && (
         <div className="glass-card" style={{ padding: '15px', marginBottom: '15px' }}>
-          <div style={{ display: 'flex', gap: '10px' }}>
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+            {/* 加料區需要填寫分類 */}
+            {hasPrice && (
+              <input placeholder="分類(如:肉類)" className="menu-edit-input" style={{ width: '100px' }} value={newItem.type} onChange={e => setNewItem({...newItem, type: e.target.value})} />
+            )}
             <input placeholder="圖" className="menu-edit-input" style={{ width: '45px' }} value={newItem.icon} onChange={e => setNewItem({...newItem, icon: e.target.value})} />
             <input placeholder={placeholder} className="menu-edit-input" value={newItem.name} onChange={e => setNewItem({...newItem, name: e.target.value})} />
-            {hasPrice && <input placeholder="價格" type="number" className="menu-edit-input" style={{ width: '70px' }} onChange={e => setNewItem({...newItem, price: Number(e.target.value)})} />}
-            <button className="btn-gradient" style={{ background: '#52c41a' }} onClick={add}>確認</button>
+            {hasPrice && <input placeholder="價格" type="number" className="menu-edit-input" style={{ width: '70px' }} value={newItem.price} onChange={e => setNewItem({...newItem, price: Number(e.target.value)})} />}
+            <button className="btn-gradient" style={{ background: '#52c41a' }} onClick={add}>確認新增</button>
           </div>
         </div>
       )}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
-        {data.map(item => (
-          <div key={item.id} className="glass-card" style={{ padding: '10px 18px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ fontSize: '1.1rem' }}>{item.icon} {item.name}</span>
-            {hasPrice && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <span style={{ color: '#f27a45', fontWeight: 'bold' }}>$</span>
-                <input type="number" style={{ border: 'none', borderBottom: '1px solid orange', width: '50px', fontWeight: 'bold' }} defaultValue={item.price} onBlur={(e) => updatePrice(item.id, e.target.value)} />
+
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <SortableContext items={data.map(i => i.id)} strategy={rectSortingStrategy}>
+          {Object.keys(groupedData).map(type => (
+            <div key={type} style={{ marginBottom: '20px' }}>
+              {/* 如果是加料區才顯示分類小標題 */}
+              {hasPrice && <div style={{ fontSize: '12px', color: '#888', marginBottom: '8px', fontWeight: 'bold' }}>📂 {type}</div>}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
+                {groupedData[type].map(item => (
+                  <SortableItem key={item.id} id={item.id}>
+                    <div className="glass-card" style={{ padding: '10px 18px', display: 'flex', alignItems: 'center', gap: '10px', cursor: 'grab' }}>
+                      <span style={{ color: '#ccc' }}>⠿</span>
+                      <span style={{ fontSize: '1.1rem' }}>{item.icon} {item.name}</span>
+                      {hasPrice && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <span style={{ color: '#f27a45', fontWeight: 'bold' }}>$</span>
+                          <input type="number" style={{ border: 'none', borderBottom: '1px solid orange', width: '50px', fontWeight: 'bold', background: 'transparent' }} defaultValue={item.price} onBlur={(e) => updatePrice(item.id, e.target.value)} />
+                        </div>
+                      )}
+                      <span onClick={(e) => { e.stopPropagation(); window.confirm('刪除？') && deleteDoc(doc(db, collectionName, item.id)); }} style={{ color: '#ff4d4f', cursor: 'pointer', marginLeft: '5px' }}>×</span>
+                    </div>
+                  </SortableItem>
+                ))}
               </div>
-            )}
-            <span onClick={() => window.confirm('刪除？') && deleteDoc(doc(db, collectionName, item.id))} style={{ color: '#ff4d4f', cursor: 'pointer', marginLeft: '5px' }}>×</span>
-          </div>
-        ))}
-      </div>
+            </div>
+          ))}
+        </SortableContext>
+      </DndContext>
+    </div>
+  );
+}
+
+// 拖拽需要的子元件
+function SortableItem(props) {
+  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: props.id });
+  const style = { transform: CSS.Transform.toString(transform), transition };
+  return (
+    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
+      {props.children}
     </div>
   );
 }
