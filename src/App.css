@@ -7,6 +7,7 @@
   --dark: #001529; 
   --bg: #f4f7fe; 
   --brand-orange: #f27a45; 
+  --purple: #722ed1;
 }
 
 body { 
@@ -22,9 +23,44 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.3);
   box-shadow: 0 8px 32px rgba(31, 38, 135, 0.07);
   margin-bottom: 20px;
+  padding: 20px; /* 增加內距，確保文字不貼邊 */
 }
 
-/* 拖曳把手 - 確保這個存在，拖曳才會好點 */
+/* --- 修正文字擠壓的關鍵區塊 --- */
+.config-label { 
+  font-size: 14px; 
+  color: #666; 
+  font-weight: bold; 
+  white-space: nowrap;      /* 核心修正：強制文字不換行、不被擠壓 */
+  display: block;
+  margin-bottom: 10px;
+}
+
+.toggle-group { 
+  display: flex; 
+  gap: 10px; 
+  flex-wrap: wrap;          /* 核心修正：空間不足時自動換到下一行，不硬擠 */
+  margin-bottom: 15px;
+}
+
+.status-toggle { 
+  padding: 8px 16px; 
+  border-radius: 50px; 
+  font-size: 13px; 
+  font-weight: 800; 
+  cursor: pointer; 
+  border: 1px solid #ddd; 
+  background: #f0f0f0; 
+  color: #999;
+  white-space: nowrap;      /* 核心修正：按鈕內的文字(例如:備註)不縮水 */
+  transition: 0.3s;
+}
+
+.status-toggle.active { background: var(--primary) !important; color: white !important; border-color: var(--primary); }
+.status-toggle.note-active { background: var(--purple) !important; color: white !important; border-color: var(--purple); }
+/* -------------------------- */
+
+/* 拖曳把手 */
 .drag-handle {
   width: 42px;
   height: 42px;
@@ -35,8 +71,9 @@ body {
   border-radius: 10px;
   color: #bfbfbf;
   cursor: grab;
-  touch-action: none !important; /* 這行對手機拖曳極其重要 */
-  webkit-user-select: none;    /* 防止長按選取到文字 */
+  touch-action: none !important; /* 手機拖曳關鍵 */
+  user-select: none;           /* 防止長按選取到文字 */
+  -webkit-user-select: none;
 }
 
 /* 狀態邊框 */
@@ -56,9 +93,4 @@ body {
   background: var(--primary);
 }
 
-/* 隱藏預設的 React 旋轉動畫 */
 .App-logo { display: none; }
-
-.drag-handle {
-  touch-action: none !important; /* 極其重要：禁止瀏覽器攔截觸控動作 */
-}
