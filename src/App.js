@@ -275,17 +275,25 @@ function HistoryView({ orders }) {
     </div>
   );
 }
-// --- 2. 菜單管理 (已整合防擠壓邏輯) ---
+// --- 2. 菜單管理 (移除大標題 + 加料區價格可編輯版) ---
 function MenuView({ menuItems, sensors }) {
   const [isAdding, setIsAdding] = useState(false);
   const [newCatName, setNewCatName] = useState("");
-  const [newItem, setNewItem] = useState({ name: '', price: '', emoji: '🍲', category: '經典鍋物', description: '', allowMain: true, allowExtras: true, allowNote: true });
+  const [newItem, setNewItem] = useState({ 
+    name: '', price: '', emoji: '🍲', category: '經典鍋物', 
+    description: '', allowMain: true, allowExtras: true, allowNote: true 
+  });
   
   const categories = Array.from(new Set(menuItems.map(it => it.category || "未分類"))).sort();
 
   const add = async () => {
     if (!newItem.name || !newItem.price) return alert("品名與價格為必填項目！");
-    await addDoc(collection(db, "menu"), { ...newItem, price: Number(newItem.price), sortOrder: menuItems.length, createdAt: serverTimestamp() });
+    await addDoc(collection(db, "menu"), { 
+      ...newItem, 
+      price: Number(newItem.price), 
+      sortOrder: menuItems.length, 
+      createdAt: serverTimestamp() 
+    });
     setIsAdding(false);
     setNewItem({ ...newItem, name: '', price: '' });
   };
@@ -310,9 +318,11 @@ function MenuView({ menuItems, sensors }) {
 
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-      <div className="admin-section-title">
-        <span>菜單品項管理</span>
-        <button className="btn-gradient" onClick={() => setIsAdding(!isAdding)}>{isAdding ? '✕ 關閉視窗' : '＋ 新增餐點/分類'}</button>
+      {/* 1. 移除大標題文字，保留功能按鈕 */}
+      <div className="admin-section-title" style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '20px' }}>
+        <button className="btn-gradient" onClick={() => setIsAdding(!isAdding)}>
+          {isAdding ? '✕ 關閉視窗' : '＋ 新增餐點/分類'}
+        </button>
       </div>
 
       {isAdding && (
@@ -339,7 +349,7 @@ function MenuView({ menuItems, sensors }) {
           </div>
           
           <div style={{ marginBottom: '20px' }}>
-            <label className="config-label">3. 開放客製化選項 (防止擠壓版)</label>
+            <label className="config-label">3. 開放客製化選項</label>
             <div className="toggle-group">
               <button className={`status-toggle ${newItem.allowMain ? 'active' : ''}`} onClick={() => setNewItem({...newItem, allowMain: !newItem.allowMain})}>🍚 主食</button>
               <button className={`status-toggle ${newItem.allowExtras ? 'active' : ''}`} onClick={() => setNewItem({...newItem, allowExtras: !newItem.allowExtras})}>🥩 加料</button>
@@ -368,67 +378,68 @@ function MenuView({ menuItems, sensors }) {
   );
 }
 
+// --- 單一餐點卡片組件 ---
 function MenuCard({ item, dragHandleProps }) {
   const update = async (id, field, val) => { 
     await updateDoc(doc(db, "menu", id), { [field]: val }); 
+  };
+
+  // 處理加料選項的單筆價格更新
+  const updateExtraPrice = async (extraIdx, newPrice) => {
+    const newExtras = [...(item.extras || [])];
+    newExtras[extraIdx].price = Number(newPrice);
+    await updateDoc(doc(db, "menu", item.id), { extras: newExtras });
+  };
+
+  // 處理加料選項的名稱更新
+  const updateExtraName = async (extraIdx, newName) => {
+    const newExtras = [...(item.extras || [])];
+    newExtras[extraIdx].name = newName;
+    await updateDoc(doc(db, "menu", item.id), { extras: newExtras });
   };
 
   return (
     <div className="glass-card" style={{ padding: '15px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
         <div className="drag-handle" {...dragHandleProps}>≡</div>
-        <input 
-          className="menu-edit-input" 
-          style={{ width: '40px', textAlign: 'center' }} 
-          value={item.emoji} 
-          onChange={e => update(item.id, 'emoji', e.target.value)} 
-        />
-        <input 
-          className="menu-edit-input" 
-          style={{ flex: 1, fontWeight: 'bold' }} 
-          value={item.name} 
-          onChange={e => update(item.id, 'name', e.target.value)} 
-        />
-        <input 
-          className="menu-edit-input" 
-          style={{ width: '60px' }} 
-          type="number" 
-          value={item.price} 
-          onChange={e => update(item.id, 'price', Number(e.target.value))} 
-        />
-        <button 
-          onClick={() => window.confirm('確定要下架此商品嗎？') && deleteDoc(doc(db, "menu", item.id))} 
-          style={{ color: 'var(--danger)', border: 'none', background: 'none', fontSize: '1.2rem', cursor: 'pointer' }}
-        >
-          ×
-        </button>
+        <input className="menu-edit-input" style={{ width: '40px', textAlign: 'center' }} value={item.emoji} onChange={e => update(item.id, 'emoji', e.target.value)} />
+        <input className="menu-edit-input" style={{ flex: 1, fontWeight: 'bold' }} value={item.name} onChange={e => update(item.id, 'name', e.target.value)} />
+        <input className="menu-edit-input" style={{ width: '60px' }} type="number" value={item.price} onChange={e => update(item.id, 'price', Number(e.target.value))} />
+        <button onClick={() => window.confirm('下架此商品？') && deleteDoc(doc(db, "menu", item.id))} style={{ color: 'var(--danger)', border: 'none', background: 'none', fontSize: '1.2rem' }}>×</button>
       </div>
 
       <div className="toggle-group" style={{ marginTop: '10px', display: 'flex', gap: '8px' }}>
-        {/* 主食按鈕 */}
-        <button 
-          className={`status-toggle ${item.allowMain ? 'active' : ''}`} 
-          onClick={() => update(item.id, 'allowMain', !item.allowMain)}
-        >
-          🍚 主食
-        </button>
-
-        {/* 加料按鈕 */}
-        <button 
-          className={`status-toggle ${item.allowExtras ? 'active' : ''}`} 
-          onClick={() => update(item.id, 'allowExtras', !item.allowExtras)}
-        >
-          🥩 加料
-        </button>
-
-        {/* 修正後的備註按鈕：將 note-active 改為 active，並確保判斷邏輯一致 */}
-        <button 
-          className={`status-toggle ${item.allowNote !== false ? 'active' : ''}`} 
-          onClick={() => update(item.id, 'allowNote', item.allowNote === false)}
-        >
-          📝 備註
-        </button>
+        <button className={`status-toggle ${item.allowMain ? 'active' : ''}`} onClick={() => update(item.id, 'allowMain', !item.allowMain)}>🍚 主食</button>
+        <button className={`status-toggle ${item.allowExtras ? 'active' : ''}`} onClick={() => update(item.id, 'allowExtras', !item.allowExtras)}>🥩 加料</button>
+        <button className={`status-toggle ${item.allowNote !== false ? 'active' : ''}`} onClick={() => update(item.id, 'allowNote', item.allowNote === false)}>📝 備註</button>
       </div>
+
+      {/* 2. 修改重點：加料選項管理區，現在每個項目的價格都是 Input */}
+      {item.allowExtras && item.extras && item.extras.length > 0 && (
+        <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <div style={{ fontSize: '0.8rem', color: '#666', fontWeight: 'bold', borderLeft: '3px solid var(--primary)', paddingLeft: '8px' }}>加料價格管理</div>
+          {item.extras.map((ex, idx) => (
+            <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#f9f9f9', padding: '5px 10px', borderRadius: '8px' }}>
+              <input 
+                className="menu-edit-input" 
+                style={{ flex: 1, fontSize: '0.9rem', borderBottom: '1px solid #ddd' }} 
+                value={ex.name} 
+                onChange={(e) => updateExtraName(idx, e.target.value)}
+              />
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <span style={{ fontSize: '0.8rem', color: '#f27a45' }}>+$</span>
+                <input 
+                  type="number"
+                  className="menu-edit-input" 
+                  style={{ width: '55px', color: '#f27a45', fontWeight: 'bold', textAlign: 'center' }} 
+                  value={ex.price} 
+                  onChange={(e) => updateExtraPrice(idx, e.target.value)}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -511,11 +522,13 @@ function DynamicConfigView({ title, collectionName, data, hasPrice = false, plac
     </div>
   );
 }
-// --- 4. 銷售統計 (還原完整報表、進度條、明細邏輯) ---
+// --- 4. 銷售統計 (修正：現金支付標籤長度縮減與視覺優化) ---
 function AnalyticsView({ orders }) {
   const [viewType, setViewType] = useState('daily');
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+
   const validOrders = orders.filter(o => (o.status === '已完成' || o.status === '歸檔') && o.createdAt);
+  
   const filteredOrders = validOrders.filter(o => {
     const orderDate = o.createdAt.toDate();
     const sel = new Date(selectedDate);
@@ -523,83 +536,204 @@ function AnalyticsView({ orders }) {
     if (viewType === 'monthly') return orderDate.getFullYear() === sel.getFullYear() && orderDate.getMonth() === sel.getMonth();
     return orderDate.getFullYear() === sel.getFullYear();
   });
-  const totalAmount = filteredOrders.reduce((sum, o) => sum + Number(o.totalAmount || 0), 0);
-  const dishStats = {};
-  let totalDishesCount = 0;
-  filteredOrders.forEach(o => {
-    o.items?.forEach(it => {
-      if(!dishStats[it.name]) dishStats[it.name] = { count: 0, emoji: it.emoji || '🍲' };
-      dishStats[it.name].count += 1;
-      totalDishesCount += 1;
-    });
-  });
-  const getTimeLabel = () => {
-    const d = new Date(selectedDate);
-    if (viewType === 'daily') return d.toLocaleDateString();
-    if (viewType === 'monthly') return `${d.getFullYear()}年 ${d.getMonth() + 1}月`;
-    return `${d.getFullYear()}年度`;
-  };
+
+  const totalRevenue = filteredOrders.reduce((sum, o) => sum + Number(o.totalAmount || 0), 0);
+
   return (
-    <div className="fade-in">
-      <div className="admin-section-title">
-        <div style={{ flex: 1 }}></div>
-        <div className="analytics-tabs">
-          <button className={`view-tab ${viewType === 'daily' ? 'active' : ''}`} onClick={() => setViewType('daily')}>按日</button>
-          <button className={`view-tab ${viewType === 'monthly' ? 'active' : ''}`} onClick={() => setViewType('monthly')}>按月</button>
-          <button className={`view-tab ${viewType === 'yearly' ? 'active' : ''}`} onClick={() => setViewType('yearly')}>按年</button>
+    <div className="analytics-container fade-in" style={{ paddingBottom: '40px' }}>
+      {/* 頂部切換區 */}
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center', 
+        marginBottom: '25px', 
+        gap: '10px'
+      }}>
+        <div style={{ textAlign: 'left' }}>
+          <input
+            type={viewType === 'daily' ? 'date' : viewType === 'monthly' ? 'month' : 'number'}
+            className="date-picker-input"
+            style={{ 
+              border: '1px solid #e2e8f0',
+              borderRadius: '12px',
+              padding: '10px 12px',
+              fontSize: '1rem',
+              outline: 'none',
+              boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
+              cursor: 'pointer',
+              width: viewType === 'yearly' ? '100px' : 'auto'
+            }} 
+            value={viewType === 'yearly' ? new Date(selectedDate).getFullYear() : selectedDate.slice(0, viewType === 'monthly' ? 7 : 10)}
+            onChange={(e) => {
+              let val = e.target.value;
+              if(viewType === 'yearly') val = `${val}-01-01`;
+              if(viewType === 'monthly') val = `${val}-01`;
+              setSelectedDate(val);
+            }}
+          />
+        </div>
+
+        <div className="analytics-tabs" style={{ background: '#f1f5f9', padding: '5px', borderRadius: '14px', display: 'inline-flex', flexShrink: 0 }}>
+          {['daily', 'monthly', 'yearly'].map((type) => (
+            <button 
+              key={type}
+              onClick={() => setViewType(type)}
+              style={{
+                padding: '8px 12px',
+                borderRadius: '10px',
+                border: 'none',
+                fontSize: '0.9rem',
+                fontWeight: '600',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                background: viewType === type ? '#fff' : 'transparent',
+                color: viewType === type ? '#f27a45' : '#64748b',
+                boxShadow: viewType === type ? '0 4px 6px -1px rgba(0,0,0,0.1)' : 'none',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              {type === 'daily' ? '按日' : type === 'monthly' ? '按月' : '按年'}
+            </button>
+          ))}
         </div>
       </div>
-      <div style={{ marginBottom: '35px', textAlign: 'right' }}>
-        <input
-          type={viewType === 'daily' ? 'date' : viewType === 'monthly' ? 'month' : 'number'}
-          className="date-picker-input"
-          value={viewType === 'yearly' ? new Date(selectedDate).getFullYear() : selectedDate.slice(0, viewType === 'monthly' ? 7 : 10)}
-          onChange={(e) => {
-            let val = e.target.value;
-            if(viewType === 'yearly') val = `${val}-01-01`;
-            if(viewType === 'monthly') val = `${val}-01`;
-            setSelectedDate(val);
-          }}
-        />
-      </div>
-      <div className="glass-card" style={{ padding: '50px 20px', textAlign: 'center', marginBottom: '40px', borderBottom: '8px solid var(--brand-orange)' }}>
-        <div style={{ color: '#888', marginBottom: '15px', fontWeight: 'bold', letterSpacing: '1px' }}>{getTimeLabel()} 營收總計</div>
-        <div style={{ fontSize: '4.2rem', fontWeight: '900', color: 'var(--brand-orange)', margin: '10px 0', textShadow: '0 4px 10px rgba(242,122,69,0.1)' }}>NT$ {totalAmount.toLocaleString()}</div>
-        <div style={{ color: '#555', fontSize: '1.1rem' }}>成功交付 <span style={{ color: 'var(--dark)', fontWeight: 'bold' }}>{filteredOrders.length}</span> 筆訂單</div>
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '35px' }}>
-        <div className="glass-card" style={{ padding: '30px' }}>
-          <h3 style={{ marginTop: 0, marginBottom: '25px', display: 'flex', alignItems: 'center', gap: '10px' }}>📊 品項銷量佔比</h3>
-          {Object.entries(dishStats).sort((a,b) => b[1].count - a[1].count).map(([name, data]) => {
-            const percentage = totalDishesCount > 0 ? (data.count / totalDishesCount) * 100 : 0;
-            return (
-              <div key={name} style={{ marginBottom: '22px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1rem', fontWeight: '600' }}>
-                  <span>{data.emoji} {name}</span>
-                  <span style={{ color: 'var(--brand-orange)' }}>{data.count} 份</span>
-                </div>
-                <div className="chart-bar-container">
-                  <div className="chart-bar-fill" style={{ width: `${percentage}%` }}></div>
-                </div>
-              </div>
-            );
-          })}
+
+      {/* 營收總計卡片 */}
+      <div className="revenue-summary-card" style={{ 
+        background: 'linear-gradient(135deg, #fff 0%, #fffbf2 100%)',
+        borderRadius: '24px',
+        padding: '30px',
+        marginBottom: '35px',
+        boxShadow: '0 10px 25px -5px rgba(242, 122, 69, 0.1)',
+        border: '1px solid rgba(242, 122, 69, 0.15)',
+        textAlign: 'center'
+      }}>
+        <div style={{ color: '#94a3b8', fontSize: '0.95rem', fontWeight: '500', marginBottom: '8px', letterSpacing: '0.5px' }}>
+          {selectedDate.replace(/-/g, '/')} 數據總計
         </div>
-        <div className="glass-card" style={{ padding: '30px' }}>
-          <h3 style={{ marginTop: 0, marginBottom: '25px' }}>📋 成交訂單流水</h3>
-          <div style={{ maxHeight: '500px', overflowY: 'auto', paddingRight: '10px' }}>
-            {filteredOrders.map((o, idx) => (
-              <div key={o.id} style={{ padding: '15px', borderBottom: '1px solid #eee', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <div style={{ fontWeight: 'bold' }}>{o.customerName || '顧客'} ({o.tableNum}桌)</div>
-                  <div style={{ fontSize: '12px', color: '#999' }}>{o.createdAt?.toDate().toLocaleTimeString()}</div>
-                </div>
-                <div style={{ fontWeight: '900', color: 'var(--dark)' }}>${o.totalAmount}</div>
-              </div>
-            ))}
-            {filteredOrders.length === 0 && <div style={{ textAlign: 'center', color: '#ccc', marginTop: '50px' }}>當日尚無成交</div>}
+        <div style={{ fontSize: '3.2rem', fontWeight: '800', color: '#f27a45', margin: '10px 0' }}>
+          <span style={{ fontSize: '1.5rem', marginRight: '5px', verticalAlign: 'middle' }}>NT$</span>
+          {totalRevenue.toLocaleString()}
+        </div>
+        <div style={{ 
+          display: 'inline-block',
+          background: '#f27a4515', 
+          color: '#f27a45', 
+          padding: '6px 16px', 
+          borderRadius: '50px', 
+          fontSize: '0.9rem',
+          fontWeight: '600'
+        }}>
+          已交付 {filteredOrders.length} 筆訂單
+        </div>
+      </div>
+
+      {/* 成交明細清單 */}
+      <div className="order-history-section">
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: '20px', gap: '10px' }}>
+          <span style={{ fontSize: '1.4rem' }}>📋</span>
+          <h3 style={{ margin: 0, fontSize: '1.25rem', color: '#1e293b', fontWeight: '700' }}>成交訂單明細</h3>
+        </div>
+
+        {filteredOrders.length === 0 ? (
+          <div style={{ background: '#fff', borderRadius: '20px', padding: '60px 20px', textAlign: 'center', border: '2px dashed #e2e8f0' }}>
+            <div style={{ fontSize: '3rem', marginBottom: '15px' }}>🍃</div>
+            <div style={{ color: '#94a3b8', fontSize: '1.1rem' }}>此時段尚無紀錄</div>
           </div>
-        </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {filteredOrders.map((order) => {
+              const dateObj = order.createdAt?.toDate();
+              const dateString = dateObj ? `${dateObj.getFullYear()}/${dateObj.getMonth()+1}/${dateObj.getDate()} ${dateObj.getHours().toString().padStart(2,'0')}:${dateObj.getMinutes().toString().padStart(2,'0')}` : '未知時間';
+              
+              return (
+                <div key={order.id} className="history-order-card" style={{ 
+                  background: '#fff', 
+                  borderRadius: '20px', 
+                  padding: '20px', 
+                  boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)',
+                  border: '1px solid #f1f5f9'
+                }}>
+                  {/* 訂單頭部 */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '15px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div style={{ background: '#f27a45', color: '#fff', width: '36px', height: '36px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', flexShrink: 0 }}>
+                        {order.tableNum}
+                      </div>
+                      <div>
+                        <div style={{ fontWeight: '700', color: '#334155' }}>桌號 {order.tableNum}</div>
+                        <div style={{ fontSize: '0.85rem', color: '#475569', fontWeight: '500' }}>
+                          👤 {order.customerName || '未填姓名'} | 📞 {order.customerPhone || '未填電話'}
+                        </div>
+                      </div>
+                    </div>
+                    {/* 右側：支付標籤與時間 (修正標籤寬度) */}
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
+                      <span style={{ 
+                        display: 'inline-block', // 修正關鍵：改為 inline-block 讓背景隨文字寬度
+                        background: '#f8fafc', 
+                        padding: '4px 10px', 
+                        borderRadius: '8px', 
+                        fontSize: '0.75rem', 
+                        color: '#64748b', 
+                        border: '1px solid #e2e8f0',
+                        fontWeight: '600'
+                      }}>
+                        {order.paymentMethod}
+                      </span>
+                      <div style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        📅 {dateString}
+                      </div>
+                      <div style={{ fontSize: '0.7rem', color: '#cbd5e1' }}>#{order.id.substring(0, 8).toUpperCase()}</div>
+                    </div>
+                  </div>
+
+                  {/* 品項區域 */}
+                  <div style={{ background: '#fcfcfc', borderRadius: '12px', padding: '12px', marginBottom: '12px' }}>
+                    {order.items && order.items.map((item, idx) => (
+                      <div key={idx} style={{ padding: '8px 0', borderBottom: idx === order.items.length - 1 ? 'none' : '1px solid #f1f5f9' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontWeight: '600', color: '#1e293b', fontSize: '1rem' }}>
+                              {item.emoji || '🥘'} {item.name}
+                            </div>
+                            <div style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '4px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                              {item.main && <span style={{ background: '#f1f5f9', padding: '2px 8px', borderRadius: '4px' }}>🍜 {item.main}</span>}
+                              {item.extras?.length > 0 && (
+                                <span style={{ background: '#f1f5f9', padding: '2px 8px', borderRadius: '4px' }}>
+                                  ➕ {item.extras.map(e => e.name).join(', ')}
+                                </span>
+                              )}
+                            </div>
+                            {item.itemNote && (
+                              <div style={{ color: '#d48806', fontSize: '0.8rem', marginTop: '6px', background: '#fffbe6', padding: '4px 8px', borderRadius: '6px', border: '1px solid #ffe58f', display: 'inline-block' }}>
+                                📝 {item.itemNote}
+                              </div>
+                            )}
+                          </div>
+                          <div style={{ fontWeight: '600', color: '#334155', marginLeft: '10px' }}>${item.finalPrice}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* 整單備註 */}
+                  {order.note && (
+                    <div style={{ marginBottom: '15px', fontSize: '0.85rem', color: '#475569', background: '#f8fafc', padding: '10px', borderRadius: '10px', borderLeft: '4px solid #cbd5e1' }}>
+                      <strong>單據備註：</strong>{order.note}
+                    </div>
+                  )}
+
+                  {/* 底部總價 */}
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'baseline', gap: '8px', paddingTop: '5px' }}>
+                    <span style={{ fontSize: '0.85rem', color: '#94a3b8', fontWeight: '500' }}>單筆結算</span>
+                    <span style={{ fontSize: '1.2rem', fontWeight: '800', color: '#f27a45' }}>NT$ {order.totalAmount}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );
