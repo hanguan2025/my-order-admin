@@ -369,20 +369,65 @@ function MenuView({ menuItems, sensors }) {
 }
 
 function MenuCard({ item, dragHandleProps }) {
-  const update = async (id, field, val) => { await updateDoc(doc(db, "menu", id), { [field]: val }); };
+  const update = async (id, field, val) => { 
+    await updateDoc(doc(db, "menu", id), { [field]: val }); 
+  };
+
   return (
     <div className="glass-card" style={{ padding: '15px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
         <div className="drag-handle" {...dragHandleProps}>≡</div>
-        <input className="menu-edit-input" style={{ width: '40px', textAlign: 'center' }} value={item.emoji} onChange={e => update(item.id, 'emoji', e.target.value)} />
-        <input className="menu-edit-input" style={{ flex: 1, fontWeight: 'bold' }} value={item.name} onChange={e => update(item.id, 'name', e.target.value)} />
-        <input className="menu-edit-input" style={{ width: '60px' }} type="number" value={item.price} onChange={e => update(item.id, 'price', Number(e.target.value))} />
-        <button onClick={() => window.confirm('下架？') && deleteDoc(doc(db, "menu", item.id))} style={{ color: 'var(--danger)', border: 'none', background: 'none', fontSize: '1.2rem' }}>×</button>
+        <input 
+          className="menu-edit-input" 
+          style={{ width: '40px', textAlign: 'center' }} 
+          value={item.emoji} 
+          onChange={e => update(item.id, 'emoji', e.target.value)} 
+        />
+        <input 
+          className="menu-edit-input" 
+          style={{ flex: 1, fontWeight: 'bold' }} 
+          value={item.name} 
+          onChange={e => update(item.id, 'name', e.target.value)} 
+        />
+        <input 
+          className="menu-edit-input" 
+          style={{ width: '60px' }} 
+          type="number" 
+          value={item.price} 
+          onChange={e => update(item.id, 'price', Number(e.target.value))} 
+        />
+        <button 
+          onClick={() => window.confirm('確定要下架此商品嗎？') && deleteDoc(doc(db, "menu", item.id))} 
+          style={{ color: 'var(--danger)', border: 'none', background: 'none', fontSize: '1.2rem', cursor: 'pointer' }}
+        >
+          ×
+        </button>
       </div>
-      <div className="toggle-group">
-        <button className={`status-toggle ${item.allowMain ? 'active' : ''}`} onClick={() => update(item.id, 'allowMain', !item.allowMain)}>🍚 主食</button>
-        <button className={`status-toggle ${item.allowExtras ? 'active' : ''}`} onClick={() => update(item.id, 'allowExtras', !item.allowExtras)}>🥩 加料</button>
-        <button className={`status-toggle ${item.allowNote ? 'note-active' : ''}`} onClick={() => update(item.id, 'allowNote', !item.allowNote)}>📝 備註</button>
+
+      <div className="toggle-group" style={{ marginTop: '10px', display: 'flex', gap: '8px' }}>
+        {/* 主食按鈕 */}
+        <button 
+          className={`status-toggle ${item.allowMain ? 'active' : ''}`} 
+          onClick={() => update(item.id, 'allowMain', !item.allowMain)}
+        >
+          🍚 主食
+        </button>
+
+        {/* 加料按鈕 */}
+        <button 
+          className={`status-toggle ${item.allowExtras ? 'active' : ''}`} 
+          onClick={() => update(item.id, 'allowExtras', !item.allowExtras)}
+        >
+          🥩 加料
+        </button>
+
+        {/* 修正後的備註按鈕：將 note-active 改為 active，並確保判斷邏輯一致 */}
+        <button 
+          className={`status-toggle ${item.allowNote !== false ? 'active' : ''}`} 
+          onClick={() => update(item.id, 'allowNote', item.allowNote === false)}
+        >
+          📝 備註
+        </button>
       </div>
     </div>
   );
