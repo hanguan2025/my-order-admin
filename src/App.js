@@ -89,7 +89,7 @@ export default function AdminApp() {
   const audioRef = useRef(null);
   const sensors = useSensors(
     useSensor(MouseSensor),
-    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } })
+    useSensor(TouchSensor, { activationConstraint: { delay: 0, tolerance: 5 } })
   );
   const tabNames = { 'orders': '📋 訂單監控', 'history': '📜 歷史歸檔', 'menu_all': '🍴 菜單管理', 'analytics': '📊 銷售統計' };
   useEffect(() => {

@@ -36,6 +36,7 @@ body {
   color: #bfbfbf;
   cursor: grab;
   touch-action: none !important; /* 這行對手機拖曳極其重要 */
+  webkit-user-select: none;    /* 防止長按選取到文字 */
 }
 
 /* 狀態邊框 */
@@ -57,3 +58,7 @@ body {
 
 /* 隱藏預設的 React 旋轉動畫 */
 .App-logo { display: none; }
+
+.drag-handle {
+  touch-action: none !important; /* 極其重要：禁止瀏覽器攔截觸控動作 */
+}
