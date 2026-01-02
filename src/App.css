@@ -1,38 +1,59 @@
-.App {
-  text-align: center;
+/* 管理端專用核心樣式 */
+:root { 
+  --primary: #1890ff; 
+  --success: #52c41a; 
+  --warning: #faad14; 
+  --danger: #ff4d4f; 
+  --dark: #001529; 
+  --bg: #f4f7fe; 
+  --brand-orange: #f27a45; 
 }
 
-.App-logo {
-  height: 40vmin;
-  pointer-events: none;
+body { 
+  background-color: var(--bg); 
+  margin: 0; 
+  font-family: "PingFang TC", "Microsoft JhengHei", sans-serif; 
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .App-logo {
-    animation: App-logo-spin infinite 20s linear;
-  }
+/* 玻璃質感卡片 */
+.glass-card {
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 8px 32px rgba(31, 38, 135, 0.07);
+  margin-bottom: 20px;
 }
 
-.App-header {
-  background-color: #282c34;
-  min-height: 100vh;
+/* 拖曳把手 - 確保這個存在，拖曳才會好點 */
+.drag-handle {
+  width: 42px;
+  height: 42px;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  font-size: calc(10px + 2vmin);
+  background: #f0f2f5;
+  border-radius: 10px;
+  color: #bfbfbf;
+  cursor: grab;
+  touch-action: none !important; /* 這行對手機拖曳極其重要 */
+}
+
+/* 狀態邊框 */
+.order-pending { border-left: 8px solid var(--danger); }
+.order-processing { border-left: 8px solid var(--warning); }
+.order-completed { border-left: 8px solid var(--success); }
+.order-archived { border-left: 8px solid #8c8c8c; }
+
+/* 按鈕樣式 */
+.btn-gradient {
   color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  background: var(--primary);
 }
 
-.App-link {
-  color: #61dafb;
-}
-
-@keyframes App-logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
+/* 隱藏預設的 React 旋轉動畫 */
+.App-logo { display: none; }
