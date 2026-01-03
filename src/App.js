@@ -275,17 +275,30 @@ function HistoryView({ orders }) {
     </div>
   );
 }
-// --- 2. 菜單管理 (已整合標題刪除與加料價格即時編輯) ---
+// --- 2. 菜單管理 (整合 GitHub 修正邏輯與加料即時調整) ---
 function MenuView({ menuItems, sensors }) {
   const [isAdding, setIsAdding] = useState(false);
   const [newCatName, setNewCatName] = useState("");
-  const [newItem, setNewItem] = useState({ name: '', price: '', emoji: '🍲', category: '經典鍋物', description: '', allowMain: true, allowExtras: true, allowNote: true });
+  const [newItem, setNewItem] = useState({ 
+    name: '', price: '', emoji: '🍲', category: '經典鍋物', 
+    description: '', allowMain: true, allowExtras: true, allowNote: true 
+  });
   
   const categories = Array.from(new Set(menuItems.map(it => it.category || "未分類"))).sort();
 
   const add = async () => {
     if (!newItem.name || !newItem.price) return alert("品名與價格為必填項目！");
-    await addDoc(collection(db, "menu"), { ...newItem, price: Number(newItem.price), sortOrder: menuItems.length, createdAt: serverTimestamp() });
+    await addDoc(collection(db, "menu"), { 
+      ...newItem, 
+      price: Number(newItem.price), 
+      sortOrder: menuItems.length, 
+      createdAt: serverTimestamp(),
+      extras: [
+        { name: "牛肉/份", price: 50 },
+        { name: "豬肉/份", price: 30 },
+        { name: "起司/片", price: 10 }
+      ]
+    });
     setIsAdding(false);
     setNewItem({ ...newItem, name: '', price: '' });
   };
@@ -311,7 +324,9 @@ function MenuView({ menuItems, sensors }) {
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
       <div className="admin-section-title" style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '20px' }}>
-        <button className="btn-gradient" onClick={() => setIsAdding(!isAdding)}>{isAdding ? '✕ 關閉視窗' : '＋ 新增餐點/分類'}</button>
+        <button className="btn-gradient" onClick={() => setIsAdding(!isAdding)}>
+          {isAdding ? '✕ 關閉視窗' : '＋ 新增餐點/分類'}
+        </button>
       </div>
 
       {isAdding && (
@@ -336,13 +351,12 @@ function MenuView({ menuItems, sensors }) {
               </div>
             </div>
           </div>
-          
           <div style={{ marginBottom: '20px' }}>
             <label className="config-label">3. 開放客製化選項</label>
             <div className="toggle-group">
               <button className={`status-toggle ${newItem.allowMain ? 'active' : ''}`} onClick={() => setNewItem({...newItem, allowMain: !newItem.allowMain})}>🍚 主食</button>
               <button className={`status-toggle ${newItem.allowExtras ? 'active' : ''}`} onClick={() => setNewItem({...newItem, allowExtras: !newItem.allowExtras})}>🥩 加料</button>
-              <button className={`status-toggle ${newItem.allowNote ? 'note-active' : ''}`} onClick={() => setNewItem({...newItem, allowNote: !newItem.allowNote})}>📝 備註功能</button>
+              <button className={`status-toggle ${newItem.allowNote ? 'active' : ''}`} onClick={() => setNewItem({...newItem, allowNote: !newItem.allowNote})}>📝 備註功能</button>
             </div>
           </div>
           <button className="btn-gradient" style={{ width: '100%', background: 'var(--success)' }} onClick={add}>✨ 確認新增餐點</button>
@@ -367,67 +381,86 @@ function MenuView({ menuItems, sensors }) {
   );
 }
 
-// --- 單一餐點卡片組件 (修正即時更新邏輯) ---
+// --- 3. 單一餐點卡片組件 (強硬隔離版：解決所有調整失效問題) ---
 function MenuCard({ item, dragHandleProps }) {
-  // 使用本地 State 緩存，確保輸入時不會跳動
+  // 建立一個完全獨立於 Firebase 的本地緩衝區
   const [localExtras, setLocalExtras] = useState(item.extras || []);
+  const [hasChanged, setHasChanged] = useState(false);
 
-  // 當外部資料 (Firebase) 更新時，同步回本地狀態
-  useEffect(() => {
-    setLocalExtras(item.extras || []);
-  }, [item.extras]);
-
-  const updateDocField = async (field, val) => { 
+  // 更新通用欄位 (主品名、主價格、開關)
+  const updateField = async (field, val) => { 
     await updateDoc(doc(db, "menu", item.id), { [field]: val }); 
   };
 
-  // 核心修正：處理加料更新
-  const handleExtraUpdate = async (idx, field, value) => {
-    // 1. 立即更新 UI 本地狀態 (讓使用者感覺很順暢)
-    const newExtras = [...localExtras];
-    newExtras[idx] = { ...newExtras[idx], [field]: field === 'price' ? Number(value) : value };
-    setLocalExtras(newExtras);
+  // 處理加料區文字或價格變動 (僅修改本地，不碰 Firebase)
+  const onLocalChange = (idx, field, val) => {
+    const next = [...localExtras];
+    next[idx] = { ...next[idx], [field]: field === 'price' ? (val === '' ? 0 : Number(val)) : val };
+    setLocalExtras(next);
+    setHasChanged(true); // 標記為已修改
+  };
 
-    // 2. 同步回 Firebase
-    await updateDoc(doc(db, "menu", item.id), { extras: newExtras });
+  // 手動存檔：只有按下去才會更新到 Firebase
+  const saveExtras = async () => {
+    try {
+      await updateDoc(doc(db, "menu", item.id), { extras: localExtras });
+      setHasChanged(false);
+      alert('✅ 加料設定已更新');
+    } catch (e) {
+      alert('❌ 更新失敗');
+    }
   };
 
   return (
-    <div className="glass-card" style={{ padding: '15px' }}>
+    <div className="glass-card" style={{ padding: '15px', border: hasChanged ? '1px solid var(--primary)' : '1px solid transparent' }}>
+      {/* 頂部：主餐點編輯區 (這部分通常不會衝突，維持原狀) */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
         <div className="drag-handle" {...dragHandleProps}>≡</div>
-        <input className="menu-edit-input" style={{ width: '40px', textAlign: 'center' }} value={item.emoji} onChange={e => updateDocField('emoji', e.target.value)} />
-        <input className="menu-edit-input" style={{ flex: 1, fontWeight: 'bold' }} value={item.name} onChange={e => updateDocField('name', e.target.value)} />
-        <input className="menu-edit-input" style={{ width: '60px' }} type="number" value={item.price} onChange={e => updateDocField('price', Number(e.target.value))} />
-        <button onClick={() => window.confirm('確定下架？') && deleteDoc(doc(db, "menu", item.id))} style={{ color: 'var(--danger)', border: 'none', background: 'none', fontSize: '1.2rem' }}>×</button>
+        <input className="menu-edit-input" style={{ width: '40px', textAlign: 'center' }} value={item.emoji} onChange={e => updateField('emoji', e.target.value)} />
+        <input className="menu-edit-input" style={{ flex: 1, fontWeight: 'bold' }} value={item.name} onChange={e => updateField('name', e.target.value)} />
+        <input className="menu-edit-input" style={{ width: '70px', fontWeight: 'bold' }} type="number" value={item.price} onChange={e => updateField('price', Number(e.target.value))} />
+        <button onClick={() => window.confirm('確定要下架嗎？') && deleteDoc(doc(db, "menu", item.id))} style={{ color: 'var(--danger)', border: 'none', background: 'none', cursor: 'pointer' }}>×</button>
       </div>
 
+      {/* 中間：功能開關 (根據 GitHub Commit 修正) */}
       <div className="toggle-group" style={{ marginTop: '10px', display: 'flex', gap: '8px' }}>
-        <button className={`status-toggle ${item.allowMain ? 'active' : ''}`} onClick={() => updateDocField('allowMain', !item.allowMain)}>🍚 主食</button>
-        <button className={`status-toggle ${item.allowExtras ? 'active' : ''}`} onClick={() => updateDocField('allowExtras', !item.allowExtras)}>🥩 加料</button>
-        <button className={`status-toggle ${item.allowNote !== false ? 'active' : ''}`} onClick={() => updateDocField('allowNote', item.allowNote === false)}>📝 備註</button>
+        <button className={`status-toggle ${item.allowMain ? 'active' : ''}`} onClick={() => updateField('allowMain', !item.allowMain)}>🍚 主食</button>
+        <button className={`status-toggle ${item.allowExtras ? 'active' : ''}`} onClick={() => updateField('allowExtras', !item.allowExtras)}>🥩 加料</button>
+        <button className={`status-toggle ${item.allowNote !== false ? 'active' : ''}`} onClick={() => updateField('allowNote', item.allowNote === false)}>📝 備註</button>
       </div>
 
-      {/* 加料管理區：修正後的即時編輯 Input */}
+      {/* 底部：加料區 (完全本地化編輯) */}
       {item.allowExtras && localExtras.length > 0 && (
-        <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          <div style={{ fontSize: '0.8rem', color: '#666', fontWeight: 'bold', borderLeft: '3px solid var(--primary)', paddingLeft: '8px' }}>加料價格管理</div>
+        <div style={{ marginTop: '15px', padding: '12px', background: '#f8fafc', borderRadius: '12px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+            <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: '800' }}>🥩 加料項目與價格調整</span>
+            {hasChanged && (
+              <button 
+                onClick={saveExtras}
+                style={{ background: 'var(--primary)', color: '#fff', border: 'none', padding: '2px 8px', borderRadius: '5px', fontSize: '0.75rem', cursor: 'pointer', animation: 'pulse 1.5s infinite' }}
+              >
+                💾 點我儲存修改
+              </button>
+            )}
+          </div>
+          
           {localExtras.map((ex, idx) => (
-            <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#f9f9f9', padding: '5px 10px', borderRadius: '8px' }}>
+            <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
               <input 
                 className="menu-edit-input" 
-                style={{ flex: 1, fontSize: '0.9rem', borderBottom: '1px solid #ddd' }} 
+                style={{ flex: 1, fontSize: '0.9rem', background: '#fff' }} 
                 value={ex.name} 
-                onChange={(e) => handleExtraUpdate(idx, 'name', e.target.value)}
+                onChange={(e) => onLocalChange(idx, 'name', e.target.value)}
               />
-              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <span style={{ fontSize: '0.8rem', color: '#f27a45' }}>+$</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '2px', background: '#fff', padding: '2px 8px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                <span style={{ fontSize: '0.75rem', color: '#f27a45', fontWeight: 'bold' }}>$</span>
                 <input 
                   type="number"
                   className="menu-edit-input" 
-                  style={{ width: '55px', color: '#f27a45', fontWeight: 'bold', textAlign: 'center' }} 
+                  style={{ width: '55px', color: '#f27a45', fontWeight: '800', textAlign: 'center', border: 'none' }} 
                   value={ex.price} 
-                  onChange={(e) => handleExtraUpdate(idx, 'price', e.target.value)}
+                  onChange={(e) => onLocalChange(idx, 'price', e.target.value)}
+                  onFocus={(e) => e.target.select()}
                 />
               </div>
             </div>
