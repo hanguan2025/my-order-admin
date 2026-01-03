@@ -516,7 +516,7 @@ function DynamicConfigView({ title, collectionName, data, hasPrice = false, plac
     </div>
   );
 }
-// --- 4. 銷售統計 (修正：年份選擇器寬度縮減與支付標籤優化) ---
+// --- 4. 銷售統計 (包含：置中年份選擇器、熱銷排行與金額長條圖) ---
 function AnalyticsView({ orders }) {
   const [viewType, setViewType] = useState('daily');
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
@@ -533,16 +533,29 @@ function AnalyticsView({ orders }) {
 
   const totalRevenue = filteredOrders.reduce((sum, o) => sum + Number(o.totalAmount || 0), 0);
 
+  // 計算品項銷量與總額統計
+  const itemStats = filteredOrders.reduce((acc, order) => {
+    if (order.items) {
+      order.items.forEach(item => {
+        const itemName = item.name;
+        if (!acc[itemName]) {
+          acc[itemName] = { count: 0, revenue: 0, emoji: item.emoji || '🥘' };
+        }
+        acc[itemName].count += 1;
+        acc[itemName].revenue += Number(item.finalPrice || 0);
+      });
+    }
+    return acc;
+  }, {});
+
+  const sortedStats = Object.entries(itemStats)
+    .map(([name, data]) => ({ name, ...data }))
+    .sort((a, b) => b.revenue - a.revenue);
+
   return (
     <div className="analytics-container fade-in" style={{ paddingBottom: '40px' }}>
-      {/* 頂部切換區 */}
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        alignItems: 'center', 
-        marginBottom: '25px', 
-        gap: '10px'
-      }}>
+      {/* 頂部切換與日期選擇區 */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px', gap: '10px' }}>
         <div style={{ textAlign: 'left' }}>
           <input
             type={viewType === 'daily' ? 'date' : viewType === 'monthly' ? 'month' : 'number'}
@@ -550,16 +563,19 @@ function AnalyticsView({ orders }) {
             style={{ 
               border: '1px solid #e2e8f0',
               borderRadius: '12px',
-              padding: viewType === 'yearly' ? '10px 8px' : '10px 12px', // 按年時縮減內邊距
+              // 修正重點：確保 padding 左右相等 (8px 8px)，並強制 text-align 置中
+              padding: viewType === 'yearly' ? '10px 8px' : '10px 12px',
               fontSize: '1rem',
-              fontWeight: '700', // 加粗讓年份更清晰
+              fontWeight: '700',
               outline: 'none',
               boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
               cursor: 'pointer',
-              // 修正重點：針對不同模式給予精確寬度
-              width: viewType === 'yearly' ? '85px' : viewType === 'monthly' ? '140px' : 'auto',
-              textAlign: viewType === 'yearly' ? 'center' : 'left', // 年份居中顯示
-              color: '#1e293b'
+              // 寬度稍微加寬一點點 (從 85px 改為 90px) 配合左右內距會更漂亮
+              width: viewType === 'yearly' ? '90px' : viewType === 'monthly' ? '140px' : 'auto',
+              textAlign: 'center', // 強制文字居中
+              color: '#1e293b',
+              appearance: 'none', // 移除瀏覽器預設樣式影響
+              WebkitAppearance: 'none'
             }} 
             value={viewType === 'yearly' ? new Date(selectedDate).getFullYear() : selectedDate.slice(0, viewType === 'monthly' ? 7 : 10)}
             onChange={(e) => {
@@ -571,25 +587,13 @@ function AnalyticsView({ orders }) {
           />
         </div>
 
-        <div className="analytics-tabs" style={{ background: '#f1f5f9', padding: '5px', borderRadius: '14px', display: 'inline-flex', flexShrink: 0 }}>
+        <div className="analytics-tabs" style={{ background: '#f1f5f9', padding: '5px', borderRadius: '14px', display: 'inline-flex' }}>
           {['daily', 'monthly', 'yearly'].map((type) => (
-            <button 
-              key={type}
-              onClick={() => setViewType(type)}
-              style={{
-                padding: '8px 12px',
-                borderRadius: '10px',
-                border: 'none',
-                fontSize: '0.9rem',
-                fontWeight: '600',
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-                background: viewType === type ? '#fff' : 'transparent',
-                color: viewType === type ? '#f27a45' : '#64748b',
-                boxShadow: viewType === type ? '0 4px 6px -1px rgba(0,0,0,0.1)' : 'none',
-                whiteSpace: 'nowrap'
-              }}
-            >
+            <button key={type} onClick={() => setViewType(type)} style={{
+              padding: '8px 12px', borderRadius: '10px', border: 'none', fontSize: '0.9rem', fontWeight: '600', cursor: 'pointer',
+              background: viewType === type ? '#fff' : 'transparent', color: viewType === type ? '#f27a45' : '#64748b',
+              boxShadow: viewType === type ? '0 4px 6px -1px rgba(0,0,0,0.1)' : 'none'
+            }}>
               {type === 'daily' ? '按日' : type === 'monthly' ? '按月' : '按年'}
             </button>
           ))}
@@ -598,32 +602,58 @@ function AnalyticsView({ orders }) {
 
       {/* 營收總計卡片 */}
       <div className="revenue-summary-card" style={{ 
-        background: 'linear-gradient(135deg, #fff 0%, #fffbf2 100%)',
-        borderRadius: '24px',
-        padding: '30px',
-        marginBottom: '35px',
-        boxShadow: '0 10px 25px -5px rgba(242, 122, 69, 0.1)',
-        border: '1px solid rgba(242, 122, 69, 0.15)',
-        textAlign: 'center'
+        background: 'linear-gradient(135deg, #fff 0%, #fffbf2 100%)', borderRadius: '24px', padding: '30px', marginBottom: '35px',
+        boxShadow: '0 10px 25px -5px rgba(242, 122, 69, 0.1)', border: '1px solid rgba(242, 122, 69, 0.15)', textAlign: 'center'
       }}>
-        <div style={{ color: '#94a3b8', fontSize: '0.95rem', fontWeight: '500', marginBottom: '8px', letterSpacing: '0.5px' }}>
-          {selectedDate.replace(/-/g, '/')} 數據總計
-        </div>
+        <div style={{ color: '#94a3b8', fontSize: '0.95rem', fontWeight: '500', marginBottom: '8px' }}>{selectedDate.replace(/-/g, '/')} 營收總計</div>
         <div style={{ fontSize: '3.2rem', fontWeight: '800', color: '#f27a45', margin: '10px 0' }}>
-          <span style={{ fontSize: '1.5rem', marginRight: '5px', verticalAlign: 'middle' }}>NT$</span>
-          {totalRevenue.toLocaleString()}
+          <span style={{ fontSize: '1.5rem', marginRight: '5px' }}>NT$</span>{totalRevenue.toLocaleString()}
         </div>
-        <div style={{ 
-          display: 'inline-block',
-          background: '#f27a4515', 
-          color: '#f27a45', 
-          padding: '6px 16px', 
-          borderRadius: '50px', 
-          fontSize: '0.9rem',
-          fontWeight: '600'
-        }}>
+        <div style={{ background: '#f27a4515', color: '#f27a45', padding: '6px 16px', borderRadius: '50px', fontSize: '0.9rem', fontWeight: '600' }}>
           已交付 {filteredOrders.length} 筆訂單
         </div>
+      </div>
+
+      {/* 📊 長條圖統計區 */}
+      <div style={{ marginBottom: '40px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: '20px', gap: '10px' }}>
+          <span style={{ fontSize: '1.4rem' }}>📊</span>
+          <h3 style={{ margin: 0, fontSize: '1.25rem', color: '#1e293b', fontWeight: '700' }}>品項營收佔比分析</h3>
+        </div>
+
+        {sortedStats.length === 0 ? (
+          <div style={{ color: '#94a3b8', textAlign: 'center', padding: '30px', background: '#f8fafc', borderRadius: '20px' }}>暫無銷售數據</div>
+        ) : (
+          <div style={{ background: '#fff', padding: '25px', borderRadius: '24px', border: '1px solid #f1f5f9' }}>
+            {sortedStats.map((stat, idx) => {
+              const percentage = totalRevenue > 0 ? (stat.revenue / totalRevenue * 100).toFixed(1) : 0;
+              return (
+                <div key={idx} style={{ marginBottom: '20px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '1.2rem' }}>{stat.emoji}</span>
+                      <span style={{ fontWeight: '700', color: '#334155' }}>{stat.name}</span>
+                      <span style={{ color: '#94a3b8', fontSize: '0.85rem' }}>({stat.count} 份)</span>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontWeight: '800', color: '#f27a45', fontSize: '1rem' }}>NT$ {stat.revenue.toLocaleString()}</div>
+                      <div style={{ fontSize: '0.75rem', color: '#cbd5e1' }}>佔比 {percentage}%</div>
+                    </div>
+                  </div>
+                  <div style={{ height: '12px', background: '#f1f5f9', borderRadius: '10px', overflow: 'hidden' }}>
+                    <div style={{ 
+                      width: `${percentage}%`, 
+                      background: 'linear-gradient(90deg, #f27a45, #ff9a6a)', 
+                      height: '100%',
+                      borderRadius: '10px',
+                      transition: 'width 0.8s ease-out'
+                    }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* 成交明細清單 */}
@@ -632,99 +662,47 @@ function AnalyticsView({ orders }) {
           <span style={{ fontSize: '1.4rem' }}>📋</span>
           <h3 style={{ margin: 0, fontSize: '1.25rem', color: '#1e293b', fontWeight: '700' }}>成交訂單明細</h3>
         </div>
-
         {filteredOrders.length === 0 ? (
           <div style={{ background: '#fff', borderRadius: '20px', padding: '60px 20px', textAlign: 'center', border: '2px dashed #e2e8f0' }}>
-            <div style={{ fontSize: '3rem', marginBottom: '15px' }}>🍃</div>
-            <div style={{ color: '#94a3b8', fontSize: '1.1rem' }}>此時段尚無紀錄</div>
+            <div style={{ fontSize: '3rem' }}>🍃</div>
+            <div style={{ color: '#94a3b8' }}>此時段尚無紀錄</div>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             {filteredOrders.map((order) => {
               const dateObj = order.createdAt?.toDate();
               const dateString = dateObj ? `${dateObj.getFullYear()}/${dateObj.getMonth()+1}/${dateObj.getDate()} ${dateObj.getHours().toString().padStart(2,'0')}:${dateObj.getMinutes().toString().padStart(2,'0')}` : '未知時間';
-              
               return (
                 <div key={order.id} className="history-order-card" style={{ 
-                  background: '#fff', 
-                  borderRadius: '20px', 
-                  padding: '20px', 
-                  boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)',
-                  border: '1px solid #f1f5f9'
+                  background: '#fff', borderRadius: '20px', padding: '20px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', border: '1px solid #f1f5f9'
                 }}>
-                  {/* 訂單頭部 */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '15px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <div style={{ background: '#f27a45', color: '#fff', width: '36px', height: '36px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', flexShrink: 0 }}>
-                        {order.tableNum}
-                      </div>
+                      <div style={{ background: '#f27a45', color: '#fff', width: '36px', height: '36px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>{order.tableNum}</div>
                       <div>
                         <div style={{ fontWeight: '700', color: '#334155' }}>桌號 {order.tableNum}</div>
-                        <div style={{ fontSize: '0.85rem', color: '#475569', fontWeight: '500' }}>
-                          👤 {order.customerName || '未填姓名'} | 📞 {order.customerPhone || '未填電話'}
-                        </div>
+                        <div style={{ fontSize: '0.85rem', color: '#475569' }}>👤 {order.customerName} | 📞 {order.customerPhone}</div>
                       </div>
                     </div>
-                    {/* 右側：支付標籤與時間 */}
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
-                      <span style={{ 
-                        display: 'inline-block',
-                        background: '#f8fafc', 
-                        padding: '4px 10px', 
-                        borderRadius: '8px', 
-                        fontSize: '0.75rem', 
-                        color: '#64748b', 
-                        border: '1px solid #e2e8f0',
-                        fontWeight: '600'
-                      }}>
-                        {order.paymentMethod}
-                      </span>
-                      <div style={{ fontSize: '0.75rem', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        📅 {dateString}
-                      </div>
-                      <div style={{ fontSize: '0.7rem', color: '#cbd5e1' }}>#{order.id.substring(0, 8).toUpperCase()}</div>
+                      <span style={{ display: 'inline-block', background: '#f8fafc', padding: '4px 10px', borderRadius: '8px', fontSize: '0.75rem', color: '#64748b', border: '1px solid #e2e8f0', fontWeight: '600' }}>{order.paymentMethod}</span>
+                      <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>📅 {dateString}</div>
                     </div>
                   </div>
-
                   {/* 品項區域 */}
                   <div style={{ background: '#fcfcfc', borderRadius: '12px', padding: '12px', marginBottom: '12px' }}>
-                    {order.items && order.items.map((item, idx) => (
-                      <div key={idx} style={{ padding: '8px 0', borderBottom: idx === order.items.length - 1 ? 'none' : '1px solid #f1f5f9' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                          <div style={{ flex: 1 }}>
-                            <div style={{ fontWeight: '600', color: '#1e293b', fontSize: '1rem' }}>
-                              {item.emoji || '🥘'} {item.name}
-                            </div>
-                            <div style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '4px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                              {item.main && <span style={{ background: '#f1f5f9', padding: '2px 8px', borderRadius: '4px' }}>🍜 {item.main}</span>}
-                              {item.extras?.length > 0 && (
-                                <span style={{ background: '#f1f5f9', padding: '2px 8px', borderRadius: '4px' }}>
-                                  ➕ {item.extras.map(e => e.name).join(', ')}
-                                </span>
-                              )}
-                            </div>
-                            {item.itemNote && (
-                              <div style={{ color: '#d48806', fontSize: '0.8rem', marginTop: '6px', background: '#fffbe6', padding: '4px 8px', borderRadius: '6px', border: '1px solid #ffe58f', display: 'inline-block' }}>
-                                📝 {item.itemNote}
-                              </div>
-                            )}
-                          </div>
-                          <div style={{ fontWeight: '600', color: '#334155', marginLeft: '10px' }}>${item.finalPrice}</div>
+                    {order.items?.map((item, idx) => (
+                      <div key={idx} style={{ padding: '8px 0', borderBottom: idx === order.items.length - 1 ? 'none' : '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between' }}>
+                        <div>
+                          <div style={{ fontWeight: '600', color: '#1e293b' }}>{item.emoji} {item.name}</div>
+                          <div style={{ fontSize: '0.85rem', color: '#64748b' }}>{item.main} {item.extras?.map(e => e.name).join(', ')}</div>
                         </div>
+                        <div style={{ fontWeight: '600' }}>${item.finalPrice}</div>
                       </div>
                     ))}
                   </div>
-
-                  {/* 整單備註 */}
-                  {order.note && (
-                    <div style={{ marginBottom: '15px', fontSize: '0.85rem', color: '#475569', background: '#f8fafc', padding: '10px', borderRadius: '10px', borderLeft: '4px solid #cbd5e1' }}>
-                      <strong>單據備註：</strong>{order.note}
-                    </div>
-                  )}
-
-                  {/* 底部總價 */}
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'baseline', gap: '8px', paddingTop: '5px' }}>
-                    <span style={{ fontSize: '0.85rem', color: '#94a3b8', fontWeight: '500' }}>單筆結算</span>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'baseline', gap: '8px' }}>
+                    <span style={{ fontSize: '0.85rem', color: '#94a3b8' }}>單筆結算</span>
                     <span style={{ fontSize: '1.2rem', fontWeight: '800', color: '#f27a45' }}>NT$ {order.totalAmount}</span>
                   </div>
                 </div>
