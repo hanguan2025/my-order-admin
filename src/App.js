@@ -275,25 +275,17 @@ function HistoryView({ orders }) {
     </div>
   );
 }
-// --- 2. 菜單管理 (移除大標題 + 加料區價格可編輯版) ---
+// --- 2. 菜單管理 (已整合標題刪除與加料價格即時編輯) ---
 function MenuView({ menuItems, sensors }) {
   const [isAdding, setIsAdding] = useState(false);
   const [newCatName, setNewCatName] = useState("");
-  const [newItem, setNewItem] = useState({ 
-    name: '', price: '', emoji: '🍲', category: '經典鍋物', 
-    description: '', allowMain: true, allowExtras: true, allowNote: true 
-  });
+  const [newItem, setNewItem] = useState({ name: '', price: '', emoji: '🍲', category: '經典鍋物', description: '', allowMain: true, allowExtras: true, allowNote: true });
   
   const categories = Array.from(new Set(menuItems.map(it => it.category || "未分類"))).sort();
 
   const add = async () => {
     if (!newItem.name || !newItem.price) return alert("品名與價格為必填項目！");
-    await addDoc(collection(db, "menu"), { 
-      ...newItem, 
-      price: Number(newItem.price), 
-      sortOrder: menuItems.length, 
-      createdAt: serverTimestamp() 
-    });
+    await addDoc(collection(db, "menu"), { ...newItem, price: Number(newItem.price), sortOrder: menuItems.length, createdAt: serverTimestamp() });
     setIsAdding(false);
     setNewItem({ ...newItem, name: '', price: '' });
   };
@@ -318,11 +310,8 @@ function MenuView({ menuItems, sensors }) {
 
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-      {/* 1. 移除大標題文字，保留功能按鈕 */}
       <div className="admin-section-title" style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '20px' }}>
-        <button className="btn-gradient" onClick={() => setIsAdding(!isAdding)}>
-          {isAdding ? '✕ 關閉視窗' : '＋ 新增餐點/分類'}
-        </button>
+        <button className="btn-gradient" onClick={() => setIsAdding(!isAdding)}>{isAdding ? '✕ 關閉視窗' : '＋ 新增餐點/分類'}</button>
       </div>
 
       {isAdding && (
@@ -378,23 +367,28 @@ function MenuView({ menuItems, sensors }) {
   );
 }
 
-// --- 單一餐點卡片組件 ---
+// --- 單一餐點卡片組件 (修正即時更新邏輯) ---
 function MenuCard({ item, dragHandleProps }) {
-  const update = async (id, field, val) => { 
-    await updateDoc(doc(db, "menu", id), { [field]: val }); 
+  // 使用本地 State 緩存，確保輸入時不會跳動
+  const [localExtras, setLocalExtras] = useState(item.extras || []);
+
+  // 當外部資料 (Firebase) 更新時，同步回本地狀態
+  useEffect(() => {
+    setLocalExtras(item.extras || []);
+  }, [item.extras]);
+
+  const updateDocField = async (field, val) => { 
+    await updateDoc(doc(db, "menu", item.id), { [field]: val }); 
   };
 
-  // 處理加料選項的單筆價格更新
-  const updateExtraPrice = async (extraIdx, newPrice) => {
-    const newExtras = [...(item.extras || [])];
-    newExtras[extraIdx].price = Number(newPrice);
-    await updateDoc(doc(db, "menu", item.id), { extras: newExtras });
-  };
+  // 核心修正：處理加料更新
+  const handleExtraUpdate = async (idx, field, value) => {
+    // 1. 立即更新 UI 本地狀態 (讓使用者感覺很順暢)
+    const newExtras = [...localExtras];
+    newExtras[idx] = { ...newExtras[idx], [field]: field === 'price' ? Number(value) : value };
+    setLocalExtras(newExtras);
 
-  // 處理加料選項的名稱更新
-  const updateExtraName = async (extraIdx, newName) => {
-    const newExtras = [...(item.extras || [])];
-    newExtras[extraIdx].name = newName;
+    // 2. 同步回 Firebase
     await updateDoc(doc(db, "menu", item.id), { extras: newExtras });
   };
 
@@ -402,29 +396,29 @@ function MenuCard({ item, dragHandleProps }) {
     <div className="glass-card" style={{ padding: '15px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
         <div className="drag-handle" {...dragHandleProps}>≡</div>
-        <input className="menu-edit-input" style={{ width: '40px', textAlign: 'center' }} value={item.emoji} onChange={e => update(item.id, 'emoji', e.target.value)} />
-        <input className="menu-edit-input" style={{ flex: 1, fontWeight: 'bold' }} value={item.name} onChange={e => update(item.id, 'name', e.target.value)} />
-        <input className="menu-edit-input" style={{ width: '60px' }} type="number" value={item.price} onChange={e => update(item.id, 'price', Number(e.target.value))} />
-        <button onClick={() => window.confirm('下架此商品？') && deleteDoc(doc(db, "menu", item.id))} style={{ color: 'var(--danger)', border: 'none', background: 'none', fontSize: '1.2rem' }}>×</button>
+        <input className="menu-edit-input" style={{ width: '40px', textAlign: 'center' }} value={item.emoji} onChange={e => updateDocField('emoji', e.target.value)} />
+        <input className="menu-edit-input" style={{ flex: 1, fontWeight: 'bold' }} value={item.name} onChange={e => updateDocField('name', e.target.value)} />
+        <input className="menu-edit-input" style={{ width: '60px' }} type="number" value={item.price} onChange={e => updateDocField('price', Number(e.target.value))} />
+        <button onClick={() => window.confirm('確定下架？') && deleteDoc(doc(db, "menu", item.id))} style={{ color: 'var(--danger)', border: 'none', background: 'none', fontSize: '1.2rem' }}>×</button>
       </div>
 
       <div className="toggle-group" style={{ marginTop: '10px', display: 'flex', gap: '8px' }}>
-        <button className={`status-toggle ${item.allowMain ? 'active' : ''}`} onClick={() => update(item.id, 'allowMain', !item.allowMain)}>🍚 主食</button>
-        <button className={`status-toggle ${item.allowExtras ? 'active' : ''}`} onClick={() => update(item.id, 'allowExtras', !item.allowExtras)}>🥩 加料</button>
-        <button className={`status-toggle ${item.allowNote !== false ? 'active' : ''}`} onClick={() => update(item.id, 'allowNote', item.allowNote === false)}>📝 備註</button>
+        <button className={`status-toggle ${item.allowMain ? 'active' : ''}`} onClick={() => updateDocField('allowMain', !item.allowMain)}>🍚 主食</button>
+        <button className={`status-toggle ${item.allowExtras ? 'active' : ''}`} onClick={() => updateDocField('allowExtras', !item.allowExtras)}>🥩 加料</button>
+        <button className={`status-toggle ${item.allowNote !== false ? 'active' : ''}`} onClick={() => updateDocField('allowNote', item.allowNote === false)}>📝 備註</button>
       </div>
 
-      {/* 2. 修改重點：加料選項管理區，現在每個項目的價格都是 Input */}
-      {item.allowExtras && item.extras && item.extras.length > 0 && (
+      {/* 加料管理區：修正後的即時編輯 Input */}
+      {item.allowExtras && localExtras.length > 0 && (
         <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
           <div style={{ fontSize: '0.8rem', color: '#666', fontWeight: 'bold', borderLeft: '3px solid var(--primary)', paddingLeft: '8px' }}>加料價格管理</div>
-          {item.extras.map((ex, idx) => (
+          {localExtras.map((ex, idx) => (
             <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#f9f9f9', padding: '5px 10px', borderRadius: '8px' }}>
               <input 
                 className="menu-edit-input" 
                 style={{ flex: 1, fontSize: '0.9rem', borderBottom: '1px solid #ddd' }} 
                 value={ex.name} 
-                onChange={(e) => updateExtraName(idx, e.target.value)}
+                onChange={(e) => handleExtraUpdate(idx, 'name', e.target.value)}
               />
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <span style={{ fontSize: '0.8rem', color: '#f27a45' }}>+$</span>
@@ -433,7 +427,7 @@ function MenuCard({ item, dragHandleProps }) {
                   className="menu-edit-input" 
                   style={{ width: '55px', color: '#f27a45', fontWeight: 'bold', textAlign: 'center' }} 
                   value={ex.price} 
-                  onChange={(e) => updateExtraPrice(idx, e.target.value)}
+                  onChange={(e) => handleExtraUpdate(idx, 'price', e.target.value)}
                 />
               </div>
             </div>
@@ -522,7 +516,7 @@ function DynamicConfigView({ title, collectionName, data, hasPrice = false, plac
     </div>
   );
 }
-// --- 4. 銷售統計 (修正：現金支付標籤長度縮減與視覺優化) ---
+// --- 4. 銷售統計 (修正：年份選擇器寬度縮減與支付標籤優化) ---
 function AnalyticsView({ orders }) {
   const [viewType, setViewType] = useState('daily');
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
@@ -556,12 +550,16 @@ function AnalyticsView({ orders }) {
             style={{ 
               border: '1px solid #e2e8f0',
               borderRadius: '12px',
-              padding: '10px 12px',
+              padding: viewType === 'yearly' ? '10px 8px' : '10px 12px', // 按年時縮減內邊距
               fontSize: '1rem',
+              fontWeight: '700', // 加粗讓年份更清晰
               outline: 'none',
               boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
               cursor: 'pointer',
-              width: viewType === 'yearly' ? '100px' : 'auto'
+              // 修正重點：針對不同模式給予精確寬度
+              width: viewType === 'yearly' ? '85px' : viewType === 'monthly' ? '140px' : 'auto',
+              textAlign: viewType === 'yearly' ? 'center' : 'left', // 年份居中顯示
+              color: '#1e293b'
             }} 
             value={viewType === 'yearly' ? new Date(selectedDate).getFullYear() : selectedDate.slice(0, viewType === 'monthly' ? 7 : 10)}
             onChange={(e) => {
@@ -667,10 +665,10 @@ function AnalyticsView({ orders }) {
                         </div>
                       </div>
                     </div>
-                    {/* 右側：支付標籤與時間 (修正標籤寬度) */}
+                    {/* 右側：支付標籤與時間 */}
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
                       <span style={{ 
-                        display: 'inline-block', // 修正關鍵：改為 inline-block 讓背景隨文字寬度
+                        display: 'inline-block',
                         background: '#f8fafc', 
                         padding: '4px 10px', 
                         borderRadius: '8px', 
