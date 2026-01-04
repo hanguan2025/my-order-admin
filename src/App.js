@@ -356,7 +356,7 @@ function MenuView({ menuItems, sensors }) {
             <div className="toggle-group">
               <button className={`status-toggle ${newItem.allowMain ? 'active' : ''}`} onClick={() => setNewItem({...newItem, allowMain: !newItem.allowMain})}>🍚 主食</button>
               <button className={`status-toggle ${newItem.allowExtras ? 'active' : ''}`} onClick={() => setNewItem({...newItem, allowExtras: !newItem.allowExtras})}>🥩 加料</button>
-              <button className={`status-toggle ${newItem.allowNote ? 'active' : ''}`} onClick={() => setNewItem({...newItem, allowNote: !newItem.allowNote})}>📝 備註功能</button>
+              <button className={`status-toggle ${newItem.allowNote ? 'active' : ''}`} onClick={() => setNewItem({...newItem, allowNote: !newItem.allowNote})}>📝 備註</button>
             </div>
           </div>
           <button className="btn-gradient" style={{ width: '100%', background: 'var(--success)' }} onClick={add}>✨ 確認新增餐點</button>
