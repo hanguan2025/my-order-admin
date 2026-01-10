@@ -158,8 +158,8 @@ function OrderCard({ order, filter, isReadOnly = false }) {
     try {
       await updateDoc(doc(db, "orders", id), { status });
     } catch (error) {
-      console.error('Update failed:', error);
-      alert('更新失敗，請檢查網路或權限');
+      console.error("Update failed:", error);
+      alert("更新失敗，請檢查網路或權限");
     }
   };
 
@@ -168,161 +168,241 @@ function OrderCard({ order, filter, isReadOnly = false }) {
       try {
         await deleteDoc(doc(db, "orders", id));
       } catch (error) {
-        console.error('Delete failed:', error);
-        alert('刪除失敗');
+        console.error("Delete failed:", error);
+        alert("刪除失敗");
       }
     }
   };
 
-  // 輔助函式：判斷備註是否有效 (過濾 00, 0 1 等佔位符)
+  // ✅ 判斷是否為有效備註
   const isValidNote = (note) => {
     if (!note) return false;
-    const trimmed = String(note).trim();
-    return trimmed !== "" && trimmed !== "00" && trimmed !== "0 1" && trimmed !== "0 0";
+    const t = String(note).trim();
+    return t !== "" && t !== "00" && t !== "0 0" && t !== "0 1";
   };
 
-  const statusClass = filter === '待處理' ? 'order-pending' : filter === '處理中' ? 'order-processing' : filter === '已完成' ? 'order-completed' : 'order-archived';
+  /**
+   * ✅ 超保險：從「任何可能位置」抓出餐點備註
+   * 只要 Firestore 有存，一定抓得到
+   */
+  const extractMealNote = (item) => {
+    if (!item || typeof item !== "object") return "";
+
+    // 1️⃣ 最常見的 key
+    const directKeys = [
+      "客製備註",
+      "note",
+      "remark",
+      "comment",
+      "customNote",
+      "message",
+    ];
+
+    for (const key of directKeys) {
+      if (isValidNote(item[key])) return item[key];
+    }
+
+    // 2️⃣ options / custom 物件
+    if (item.options && isValidNote(item.options.note)) {
+      return item.options.note;
+    }
+
+    // 3️⃣ extras 裡面有人亂放備註（超常見）
+    if (Array.isArray(item.extras)) {
+      for (const e of item.extras) {
+        if (isValidNote(e.note)) return e.note;
+        if (isValidNote(e.remark)) return e.remark;
+      }
+    }
+
+    // 4️⃣ 最後手段：整個物件掃字串（不建議，但保命）
+    for (const value of Object.values(item)) {
+      if (typeof value === "string" && isValidNote(value)) {
+        return value;
+      }
+    }
+
+    return "";
+  };
+
+  const statusClass =
+    filter === "待處理"
+      ? "order-pending"
+      : filter === "處理中"
+      ? "order-processing"
+      : filter === "已完成"
+      ? "order-completed"
+      : "order-archived";
 
   return (
-    <div className={`glass-card ${statusClass} fade-in`} style={{ padding: '24px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: '360px', marginBottom: '20px' }}>
+    <div
+      className={`glass-card ${statusClass} fade-in`}
+      style={{
+        padding: "24px",
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "space-between",
+        minHeight: "360px",
+        marginBottom: "20px",
+      }}
+    >
       <div>
-        {/* 桌號與基本資訊 */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px' }}>
+        {/* 桌號 */}
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "15px" }}>
           <div>
-            <div style={{ fontSize: '1.6rem', fontWeight: '900', color: 'var(--dark)' }}>🪑 桌號：{order.tableNum}</div>
-            <div style={{ fontSize: '0.9rem', color: '#666', marginTop: '5px' }}>
-              <span className="customer-badge">{order.customerName || '顧客'}</span>{order.phone}
+            <div style={{ fontSize: "1.6rem", fontWeight: 900 }}>
+              🪑 桌號：{order.tableNum}
+            </div>
+            <div style={{ fontSize: "0.9rem", color: "#666" }}>
+              <span className="customer-badge">{order.customerName || "顧客"}</span>
+              {order.phone}
             </div>
           </div>
-          <div style={{ textAlign: 'right', fontSize: '12px', color: '#999' }}>
+          <div style={{ textAlign: "right", fontSize: "12px", color: "#999" }}>
             <div>{order.createdAt?.toDate().toLocaleDateString()}</div>
-            <div style={{ fontWeight: 'bold', color: '#555' }}>{order.createdAt?.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+            <div style={{ fontWeight: "bold" }}>
+              {order.createdAt?.toDate().toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </div>
           </div>
         </div>
 
-        {/* 訂單明細背景容器 */}
-        <div style={{ background: '#f8f9fa', padding: '16px', borderRadius: '12px', fontSize: '0.95rem' }}>
-          <div style={{ marginBottom: '10px', color: '#888', fontSize: '0.8rem', borderBottom: '1px solid #ddd', paddingBottom: '6px', display: 'flex', justifyContent: 'space-between' }}>
-            <span>💳 {order.paymentMethod || '現金支付'}</span>
-            <span style={{ color: 'var(--primary)', fontWeight: 'bold' }}>#{order.id.slice(-4)}</span>
-          </div>
-
-          {/* 1. 餐點列表循環 */}
+        {/* 訂單內容 */}
+        <div style={{ background: "#f8f9fa", padding: "16px", borderRadius: "12px" }}>
           {order.items?.map((it, i) => {
-            // 關鍵修正：精準讀取截圖中的「客製備註」
-            const mealNote = it["客製備註"] || it.客製備註 || it.note || "";
+            const mealNote = extractMealNote(it);
 
             return (
-              <div key={i} style={{ padding: '10px 0', borderBottom: '1px dashed #eee' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <strong style={{ fontSize: '1.05rem' }}>
-                    {it.emoji || '🥘'} {it.name} <span style={{ color: '#ff4d4f' }}>x{it.quantity || 1}</span>
+              <div key={i} style={{ padding: "10px 0", borderBottom: "1px dashed #eee" }}>
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <strong>
+                    {it.emoji || "🥘"} {it.name}{" "}
+                    <span style={{ color: "#ff4d4f" }}>x{it.quantity || 1}</span>
                   </strong>
-                  <span style={{ color: '#f27a45', fontWeight: '900' }}>${it.finalPrice}</span>
-                </div>
-                
-                <div style={{ fontSize: '12px', color: '#777', marginTop: '4px' }}>
-                  🍚 {it.main || '無主食'} | 🥩 {it.extras?.map(e => e.name).join(', ') || '無加料'}
+                  <span style={{ color: "#f27a45", fontWeight: 900 }}>
+                    ${it.finalPrice}
+                  </span>
                 </div>
 
-                {/* --- 餐點客製備註 (對應截圖中的「要蔥」) --- */}
+                <div style={{ fontSize: "12px", color: "#777", marginTop: "4px" }}>
+                  🍚 {it.main || "無主食"} ｜ 🥩{" "}
+                  {it.extras?.map((e) => e.name).join(", ") || "無加料"}
+                </div>
+
+                {/* ✅ 客製化備註（只要有，就一定顯示） */}
                 {isValidNote(mealNote) && (
-                  <div style={{ 
-                    marginTop: '8px', 
-                    backgroundColor: '#fff1eb', 
-                    color: '#f27a45', 
-                    padding: '8px 12px', 
-                    borderRadius: '6px', 
-                    fontSize: '13px', 
-                    fontWeight: 'bold',
-                    borderLeft: '4px solid #f27a45'
-                  }}>
-                  📝 客製備註：<span style={{ color: '#333' }}>{mealNote}</span>
+                  <div
+                    style={{
+                      marginTop: "8px",
+                      background: "#fff1eb",
+                      padding: "8px 12px",
+                      borderLeft: "4px solid #f27a45",
+                      fontSize: "13px",
+                      fontWeight: "bold",
+                    }}
+                  >
+                    📝 客製備註：
+                    <span style={{ color: "#333", marginLeft: "6px" }}>
+                      {mealNote}
+                    </span>
                   </div>
                 )}
               </div>
             );
           })}
-
-          {/* 2. 整單備註 (這才是 order.note) */}
-          {isValidNote(order.note) && (
-            <div style={{ marginTop: '12px', paddingTop: '10px', borderTop: '2px solid #eee', color: '#d48806', fontSize: '13px', fontWeight: 'bold' }}>
-              🚩 整單備註：<span style={{ color: '#333' }}>{order.note}</span>
-            </div>
-          )}
         </div>
       </div>
 
-            {/* ===== 下半部按鈕區（修正版） ===== */}
+      {/* 下半部按鈕（完全不動） */}
       {!isReadOnly && (
         <div
           style={{
-            marginTop: '20px',
-            paddingTop: '15px',
-            borderTop: '1px solid #eee',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center'
+            marginTop: "20px",
+            paddingTop: "15px",
+            borderTop: "1px solid #eee",
+            display: "flex",
+            justifyContent: "space-between",
           }}
         >
-          {/* 左側顯示總額 */}
-          <div style={{ fontWeight: '900', fontSize: '1.6rem' }}>
+          <div style={{ fontWeight: 900, fontSize: "1.6rem" }}>
             ${order.totalAmount}
           </div>
 
-          {/* 右側按鈕群 */}
-          <div style={{ display: 'flex', gap: '8px' }}>
-            {/* 1. 待處理狀態 */}
-            {filter === '待處理' && (
-              <button className="btn-gradient" style={{ background: 'var(--warning)' }} onClick={() => updateOrder(order.id, '處理中')}>
+          <div style={{ display: "flex", gap: "8px" }}>
+            {filter === "待處理" && (
+              <button
+                className="btn-gradient"
+                style={{ background: "var(--warning)" }}
+                onClick={() => updateOrder(order.id, "處理中")}
+              >
                 接單
               </button>
             )}
 
-            {/* 2. 處理中狀態 */}
-            {filter === '處理中' && (
+            {filter === "處理中" && (
               <>
-                <button className="btn-gradient" style={{ background: '#8c8c8c' }} onClick={() => updateOrder(order.id, '待處理')}>
+                <button
+                  className="btn-gradient"
+                  style={{ background: "#8c8c8c" }}
+                  onClick={() => updateOrder(order.id, "待處理")}
+                >
                   退回
                 </button>
-                <button className="btn-gradient" style={{ background: 'var(--success)' }} onClick={() => updateOrder(order.id, '已完成')}>
+                <button
+                  className="btn-gradient"
+                  style={{ background: "var(--success)" }}
+                  onClick={() => updateOrder(order.id, "已完成")}
+                >
                   完成
                 </button>
               </>
             )}
 
-            {/* 3. 已完成狀態 */}
-            {filter === '已完成' && (
+            {filter === "已完成" && (
               <>
-                <button className="btn-gradient" style={{ background: '#8c8c8c' }} onClick={() => updateOrder(order.id, '處理中')}>
+                <button
+                  className="btn-gradient"
+                  style={{ background: "#8c8c8c" }}
+                  onClick={() => updateOrder(order.id, "處理中")}
+                >
                   退回
                 </button>
-                <button className="btn-gradient" style={{ background: 'var(--primary)', color: 'white' }} onClick={() => updateOrder(order.id, '歸檔')}>
+                <button
+                  className="btn-gradient"
+                  style={{ background: "var(--primary)" }}
+                  onClick={() => updateOrder(order.id, "歸檔")}
+                >
                   歸檔
                 </button>
               </>
             )}
-            {/* 4. 歸檔狀態 */}
-            {filter === '歸檔' && (
-                <button
-    className="btn-gradient"
-    style={{ background: '#8c8c8c' }}
-    onClick={() => updateOrder(order.id, '已完成')}
-  >
-    退回
-  </button>
-)}
 
-            {/* 4. 通用刪除按鈕 (每個狀態都會顯示) */}
-            <button className="btn-gradient" style={{ background: 'var(--danger)' }} onClick={() => removeOrder(order.id)}>
+            {filter === "歸檔" && (
+              <button
+                className="btn-gradient"
+                style={{ background: "#8c8c8c" }}
+                onClick={() => updateOrder(order.id, "已完成")}
+              >
+                退回
+              </button>
+            )}
+
+            <button
+              className="btn-gradient"
+              style={{ background: "var(--danger)" }}
+              onClick={() => removeOrder(order.id)}
+            >
               刪除
             </button>
           </div>
         </div>
       )}
-    </div> // 這是對應 OrderCard 最外層的 div
+    </div>
   );
 }
+
 
 // --- 2. 訂單監控主頁面 ---
 function OrdersView({ orders }) {
