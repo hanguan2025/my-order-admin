@@ -174,139 +174,67 @@ function OrderCard({ order, filter, isReadOnly = false }) {
     }
   };
 
-  // ✅ 判斷是否為有效備註
+  // ✅ 修正：判斷是否為有效備註（封鎖 Firebase 20碼亂碼 ID）
   const isValidNote = (note) => {
-    if (!note) return false;
-    const t = String(note).trim();
-    return t !== "" && t !== "00" && t !== "0 0" && t !== "0 1";
+    if (!note || typeof note !== "string") return false;
+    const t = note.trim();
+    // 關鍵修正：封鎖剛好 20 碼的英數亂碼 (Firebase ID 特徵)
+    const isFirebaseId = /^[A-Za-z0-9]{20}$/.test(t);
+    const isUseless = ["", "00", "0 1", "undefined", "null"].includes(t.toLowerCase());
+    return !isUseless && !isFirebaseId;
   };
 
-  /**
-   * ✅ 超保險：從「任何可能位置」抓出餐點備註
-   * 只要 Firestore 有存，一定抓得到
-   */
+  // ✅ 修正：從餐點中精準抓取備註，不再掃描全物件
   const extractMealNote = (item) => {
     if (!item || typeof item !== "object") return "";
-
-    // 1️⃣ 最常見的 key
-    const directKeys = [
-      "客製備註",
-      "note",
-      "remark",
-      "comment",
-      "customNote",
-      "message",
-    ];
-
+    const directKeys = ["note", "itemNote", "remark", "客製備註"];
     for (const key of directKeys) {
       if (isValidNote(item[key])) return item[key];
     }
-
-    // 2️⃣ options / custom 物件
-    if (item.options && isValidNote(item.options.note)) {
-      return item.options.note;
-    }
-
-    // 3️⃣ extras 裡面有人亂放備註（超常見）
-    if (Array.isArray(item.extras)) {
-      for (const e of item.extras) {
-        if (isValidNote(e.note)) return e.note;
-        if (isValidNote(e.remark)) return e.remark;
-      }
-    }
-
-    // 4️⃣ 最後手段：整個物件掃字串（不建議，但保命）
-    for (const value of Object.values(item)) {
-      if (typeof value === "string" && isValidNote(value)) {
-        return value;
-      }
-    }
-
     return "";
   };
 
-  const statusClass =
-    filter === "待處理"
-      ? "order-pending"
-      : filter === "處理中"
-      ? "order-processing"
-      : filter === "已完成"
-      ? "order-completed"
-      : "order-archived";
+  const statusClass = filter === "待處理" ? "order-pending" : 
+                    filter === "處理中" ? "order-processing" : 
+                    filter === "已完成" ? "order-completed" : "order-archived";
 
   return (
-    <div
-      className={`glass-card ${statusClass} fade-in`}
-      style={{
-        padding: "24px",
-        display: "flex",
-        flexDirection: "column",
-        justifyContent: "space-between",
-        minHeight: "360px",
-        marginBottom: "20px",
-      }}
-    >
+    <div className={`glass-card ${statusClass} fade-in`} style={{
+      padding: "24px", display: "flex", flexDirection: "column",
+      justifyContent: "space-between", minHeight: "360px", marginBottom: "20px"
+    }}>
       <div>
-        {/* 桌號 */}
+        {/* 桌號與時間資訊 */}
         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "15px" }}>
           <div>
-            <div style={{ fontSize: "1.6rem", fontWeight: 900 }}>
-              🪑 桌號：{order.tableNum}
-            </div>
+            <div style={{ fontSize: "1.6rem", fontWeight: 900 }}>🪑 桌號：{order.tableNum}</div>
             <div style={{ fontSize: "0.9rem", color: "#666" }}>
-              <span className="customer-badge">{order.customerName || "顧客"}</span>
-              {order.phone}
+              <span className="customer-badge">{order.customerName || "顧客"}</span> {order.phone}
             </div>
           </div>
           <div style={{ textAlign: "right", fontSize: "12px", color: "#999" }}>
             <div>{order.createdAt?.toDate().toLocaleDateString()}</div>
-            <div style={{ fontWeight: "bold" }}>
-              {order.createdAt?.toDate().toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-              })}
-            </div>
+            <div style={{ fontWeight: "bold" }}>{order.createdAt?.toDate().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</div>
           </div>
         </div>
 
-        {/* 訂單內容 */}
+        {/* 訂單內容明細 */}
         <div style={{ background: "#f8f9fa", padding: "16px", borderRadius: "12px" }}>
           {order.items?.map((it, i) => {
             const mealNote = extractMealNote(it);
-
             return (
-              <div key={i} style={{ padding: "10px 0", borderBottom: "1px dashed #eee" }}>
+              <div key={i} style={{ padding: "10px 0", borderBottom: i === order.items.length - 1 ? "none" : "1px dashed #eee" }}>
                 <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <strong>
-                    {it.emoji || "🥘"} {it.name}{" "}
-                    <span style={{ color: "#ff4d4f" }}>x{it.quantity || 1}</span>
-                  </strong>
-                  <span style={{ color: "#f27a45", fontWeight: 900 }}>
-                    ${it.finalPrice}
-                  </span>
+                  <strong>{it.emoji || "🥘"} {it.name} <span style={{ color: "#ff4d4f" }}>x{it.quantity || 1}</span></strong>
+                  <span style={{ color: "#f27a45", fontWeight: 900 }}>${it.finalPrice}</span>
                 </div>
-
-                <div style={{ fontSize: "12px", color: "#777", marginTop: "4px" }}>
-                  🍚 {it.main || "無主食"} ｜ 🥩{" "}
-                  {it.extras?.map((e) => e.name).join(", ") || "無加料"}
+                <div style={{ fontSize: "12px", color: "#777", marginTop: "4px", paddingLeft: "26px" }}>
+                  🍚 {it.main || "無主食"} ｜ 🥩 {it.extras?.length > 0 ? it.extras.map((e) => e.name).join(", ") : "無加料"}
                 </div>
-
-                {/* ✅ 客製化備註（只要有，就一定顯示） */}
+                {/* 顯示客製備註 */}
                 {isValidNote(mealNote) && (
-                  <div
-                    style={{
-                      marginTop: "8px",
-                      background: "#fff1eb",
-                      padding: "8px 12px",
-                      borderLeft: "4px solid #f27a45",
-                      fontSize: "13px",
-                      fontWeight: "bold",
-                    }}
-                  >
-                    📝 客製備註：
-                    <span style={{ color: "#333", marginLeft: "6px" }}>
-                      {mealNote}
-                    </span>
+                  <div style={{ marginTop: "8px", marginLeft: "26px", background: "#fff1eb", padding: "8px 12px", borderLeft: "4px solid #f27a45", fontSize: "13px", borderRadius: "4px", fontWeight: "bold" }}>
+                    📝 客製備註：<span style={{ color: "#333", marginLeft: "6px" }}>{mealNote}</span>
                   </div>
                 )}
               </div>
@@ -315,94 +243,76 @@ function OrderCard({ order, filter, isReadOnly = false }) {
         </div>
       </div>
 
-      {/* 下半部按鈕（完全不動） */}
+             {/* ===== 下半部按鈕區（修正版） ===== */}
       {!isReadOnly && (
         <div
           style={{
-            marginTop: "20px",
-            paddingTop: "15px",
-            borderTop: "1px solid #eee",
-            display: "flex",
-            justifyContent: "space-between",
+            marginTop: '20px',
+            paddingTop: '15px',
+            borderTop: '1px solid #eee',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
           }}
         >
-          <div style={{ fontWeight: 900, fontSize: "1.6rem" }}>
+          {/* 左側顯示總額 */}
+          <div style={{ fontWeight: '900', fontSize: '1.6rem' }}>
             ${order.totalAmount}
           </div>
 
-          <div style={{ display: "flex", gap: "8px" }}>
-            {filter === "待處理" && (
-              <button
-                className="btn-gradient"
-                style={{ background: "var(--warning)" }}
-                onClick={() => updateOrder(order.id, "處理中")}
-              >
+          {/* 右側按鈕群 */}
+          <div style={{ display: 'flex', gap: '8px' }}>
+            {/* 1. 待處理狀態 */}
+            {filter === '待處理' && (
+              <button className="btn-gradient" style={{ background: 'var(--warning)' }} onClick={() => updateOrder(order.id, '處理中')}>
                 接單
               </button>
             )}
 
-            {filter === "處理中" && (
+            {/* 2. 處理中狀態 */}
+            {filter === '處理中' && (
               <>
-                <button
-                  className="btn-gradient"
-                  style={{ background: "#8c8c8c" }}
-                  onClick={() => updateOrder(order.id, "待處理")}
-                >
+                <button className="btn-gradient" style={{ background: '#8c8c8c' }} onClick={() => updateOrder(order.id, '待處理')}>
                   退回
                 </button>
-                <button
-                  className="btn-gradient"
-                  style={{ background: "var(--success)" }}
-                  onClick={() => updateOrder(order.id, "已完成")}
-                >
+                <button className="btn-gradient" style={{ background: 'var(--success)' }} onClick={() => updateOrder(order.id, '已完成')}>
                   完成
                 </button>
               </>
             )}
 
-            {filter === "已完成" && (
+            {/* 3. 已完成狀態 */}
+            {filter === '已完成' && (
               <>
-                <button
-                  className="btn-gradient"
-                  style={{ background: "#8c8c8c" }}
-                  onClick={() => updateOrder(order.id, "處理中")}
-                >
+                <button className="btn-gradient" style={{ background: '#8c8c8c' }} onClick={() => updateOrder(order.id, '處理中')}>
                   退回
                 </button>
-                <button
-                  className="btn-gradient"
-                  style={{ background: "var(--primary)" }}
-                  onClick={() => updateOrder(order.id, "歸檔")}
-                >
+                <button className="btn-gradient" style={{ background: 'var(--primary)', color: 'white' }} onClick={() => updateOrder(order.id, '歸檔')}>
                   歸檔
                 </button>
               </>
             )}
+            {/* 4. 歸檔狀態 */}
+            {filter === '歸檔' && (
+                <button
+    className="btn-gradient"
+    style={{ background: '#8c8c8c' }}
+    onClick={() => updateOrder(order.id, '已完成')}
+  >
+    退回
+  </button>
+)}
 
-            {filter === "歸檔" && (
-              <button
-                className="btn-gradient"
-                style={{ background: "#8c8c8c" }}
-                onClick={() => updateOrder(order.id, "已完成")}
-              >
-                退回
-              </button>
-            )}
-
-            <button
-              className="btn-gradient"
-              style={{ background: "var(--danger)" }}
-              onClick={() => removeOrder(order.id)}
-            >
+            {/* 4. 通用刪除按鈕 (每個狀態都會顯示) */}
+            <button className="btn-gradient" style={{ background: 'var(--danger)' }} onClick={() => removeOrder(order.id)}>
               刪除
             </button>
           </div>
         </div>
       )}
-    </div>
+    </div> // 這是對應 OrderCard 最外層的 div
   );
-}
-
+} // <--- 修正後的組件閉合點
 
 // --- 2. 訂單監控主頁面 ---
 function OrdersView({ orders }) {
@@ -547,63 +457,131 @@ function MenuView({ menuItems, sensors }) {
   );
 }
 
-// --- 3. 單一餐點卡片組件 (強硬隔離版：解決所有調整失效問題) ---
+// --- 3. 單一餐點卡片組件 (強硬隔離修正版：解決資料不同步與客製顯示問題) ---
 function MenuCard({ item, dragHandleProps }) {
   // 建立一個完全獨立於 Firebase 的本地緩衝區
   const [localExtras, setLocalExtras] = useState(item.extras || []);
   const [hasChanged, setHasChanged] = useState(false);
 
+  // 【修正重點：加入 useEffect】
+  // 當 Firebase 的原始資料 (item.extras) 發生變動時（例如其他裝置修改或新增餐點），
+  // 自動更新本地緩衝區，確保顯示的客製資料始終正確。
+  useEffect(() => {
+    if (item.extras) {
+      setLocalExtras(item.extras);
+      setHasChanged(false);
+    }
+  }, [item.extras]);
+
   // 更新通用欄位 (主品名、主價格、開關)
   const updateField = async (field, val) => { 
-    await updateDoc(doc(db, "menu", item.id), { [field]: val }); 
+    try {
+      await updateDoc(doc(db, "menu", item.id), { [field]: val }); 
+    } catch (e) {
+      console.error("更新欄位失敗:", e);
+    }
   };
 
-  // 處理加料區文字或價格變動 (僅修改本地，不碰 Firebase)
+  // 處理加料區文字或價格變動 (僅修改本地狀態，不即時寫入 Firebase)
   const onLocalChange = (idx, field, val) => {
     const next = [...localExtras];
-    next[idx] = { ...next[idx], [field]: field === 'price' ? (val === '' ? 0 : Number(val)) : val };
+    next[idx] = { 
+      ...next[idx], 
+      [field]: field === 'price' ? (val === '' ? 0 : Number(val)) : val 
+    };
     setLocalExtras(next);
-    setHasChanged(true); // 標記為已修改
+    setHasChanged(true); // 標記為已修改，觸發藍色儲存按鈕
   };
 
-  // 手動存檔：只有按下去才會更新到 Firebase
+  // 手動存檔：只有按下去才會將 localExtras 更新到 Firebase
   const saveExtras = async () => {
     try {
       await updateDoc(doc(db, "menu", item.id), { extras: localExtras });
       setHasChanged(false);
-      alert('✅ 加料設定已更新');
+      alert('✅ 客製加料設定已更新');
     } catch (e) {
       alert('❌ 更新失敗');
+      console.error(e);
     }
   };
 
   return (
-    <div className="glass-card" style={{ padding: '15px', border: hasChanged ? '1px solid var(--primary)' : '1px solid transparent' }}>
-      {/* 頂部：主餐點編輯區 (這部分通常不會衝突，維持原狀) */}
+    <div className="glass-card" style={{ 
+      padding: '15px', 
+      border: hasChanged ? '2px solid var(--primary)' : '1px solid transparent',
+      transition: 'border 0.3s ease'
+    }}>
+      {/* 頂部：主餐點編輯區 */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-        <div className="drag-handle" {...dragHandleProps}>≡</div>
-        <input className="menu-edit-input" style={{ width: '40px', textAlign: 'center' }} value={item.emoji} onChange={e => updateField('emoji', e.target.value)} />
-        <input className="menu-edit-input" style={{ flex: 1, fontWeight: 'bold' }} value={item.name} onChange={e => updateField('name', e.target.value)} />
-        <input className="menu-edit-input" style={{ width: '70px', fontWeight: 'bold' }} type="number" value={item.price} onChange={e => updateField('price', Number(e.target.value))} />
-        <button onClick={() => window.confirm('確定要下架嗎？') && deleteDoc(doc(db, "menu", item.id))} style={{ color: 'var(--danger)', border: 'none', background: 'none', cursor: 'pointer' }}>×</button>
+        <div className="drag-handle" {...dragHandleProps} style={{ cursor: 'grab' }}>≡</div>
+        <input 
+          className="menu-edit-input" 
+          style={{ width: '40px', textAlign: 'center' }} 
+          value={item.emoji || '🍲'} 
+          onChange={e => updateField('emoji', e.target.value)} 
+        />
+        <input 
+          className="menu-edit-input" 
+          style={{ flex: 1, fontWeight: 'bold' }} 
+          value={item.name} 
+          onChange={e => updateField('name', e.target.value)} 
+        />
+        <input 
+          className="menu-edit-input" 
+          style={{ width: '70px', fontWeight: 'bold' }} 
+          type="number" 
+          value={item.price} 
+          onChange={e => updateField('price', Number(e.target.value))} 
+        />
+        <button 
+          onClick={() => window.confirm('確定要下架此餐點嗎？') && deleteDoc(doc(db, "menu", item.id))} 
+          style={{ color: 'var(--danger)', border: 'none', background: 'none', cursor: 'pointer', fontSize: '1.2rem' }}
+        >
+          ×
+        </button>
       </div>
 
-      {/* 中間：功能開關 (根據 GitHub Commit 修正) */}
+      {/* 中間：功能開關 (🍚主食 / 🥩加料 / 📝備註) */}
       <div className="toggle-group" style={{ marginTop: '10px', display: 'flex', gap: '8px' }}>
-        <button className={`status-toggle ${item.allowMain ? 'active' : ''}`} onClick={() => updateField('allowMain', !item.allowMain)}>🍚 主食</button>
-        <button className={`status-toggle ${item.allowExtras ? 'active' : ''}`} onClick={() => updateField('allowExtras', !item.allowExtras)}>🥩 加料</button>
-        <button className={`status-toggle ${item.allowNote !== false ? 'active' : ''}`} onClick={() => updateField('allowNote', item.allowNote === false)}>📝 備註</button>
+        <button 
+          className={`status-toggle ${item.allowMain ? 'active' : ''}`} 
+          onClick={() => updateField('allowMain', !item.allowMain)}
+        >
+          🍚 主食
+        </button>
+        <button 
+          className={`status-toggle ${item.allowExtras ? 'active' : ''}`} 
+          onClick={() => updateField('allowExtras', !item.allowExtras)}
+        >
+          🥩 加料
+        </button>
+        <button 
+          className={`status-toggle ${item.allowNote !== false ? 'active' : ''}`} 
+          onClick={() => updateField('allowNote', item.allowNote === false)}
+        >
+          📝 備註
+        </button>
       </div>
 
-      {/* 底部：加料區 (完全本地化編輯) */}
+      {/* 底部：加料區 (完全本地化編輯，直到點擊儲存) */}
       {item.allowExtras && localExtras.length > 0 && (
-        <div style={{ marginTop: '15px', padding: '12px', background: '#f8fafc', borderRadius: '12px' }}>
+        <div style={{ marginTop: '15px', padding: '12px', background: '#f8fafc', borderRadius: '12px', border: '1px solid #eef2f6' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
             <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: '800' }}>🥩 加料項目與價格調整</span>
             {hasChanged && (
               <button 
                 onClick={saveExtras}
-                style={{ background: 'var(--primary)', color: '#fff', border: 'none', padding: '2px 8px', borderRadius: '5px', fontSize: '0.75rem', cursor: 'pointer', animation: 'pulse 1.5s infinite' }}
+                style={{ 
+                  background: 'var(--primary)', 
+                  color: '#fff', 
+                  border: 'none', 
+                  padding: '4px 10px', 
+                  borderRadius: '6px', 
+                  fontSize: '0.75rem', 
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 8px rgba(242, 122, 69, 0.3)',
+                  animation: 'pulse 1.5s infinite' 
+                }}
               >
                 💾 點我儲存修改
               </button>
@@ -618,7 +596,15 @@ function MenuCard({ item, dragHandleProps }) {
                 value={ex.name} 
                 onChange={(e) => onLocalChange(idx, 'name', e.target.value)}
               />
-              <div style={{ display: 'flex', alignItems: 'center', gap: '2px', background: '#fff', padding: '2px 8px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+              <div style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '2px', 
+                background: '#fff', 
+                padding: '2px 8px', 
+                borderRadius: '8px', 
+                border: '1px solid #e2e8f0' 
+              }}>
                 <span style={{ fontSize: '0.75rem', color: '#f27a45', fontWeight: 'bold' }}>$</span>
                 <input 
                   type="number"
