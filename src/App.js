@@ -253,29 +253,77 @@ function OrderCard({ order, filter, isReadOnly = false }) {
         </div>
       </div>
 
-      {/* 底部總金額與操作按鈕 */}
-      <div style={{ marginTop: '20px', paddingTop: '15px', borderTop: '1px solid #eee', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ fontWeight: '900', fontSize: '1.6rem', color: 'var(--dark)' }}>${order.totalAmount}</div>
-        {!isReadOnly && (
+            {/* ===== 下半部按鈕區（修正版） ===== */}
+      {!isReadOnly && (
+        <div
+          style={{
+            marginTop: '20px',
+            paddingTop: '15px',
+            borderTop: '1px solid #eee',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
+          }}
+        >
+          {/* 左側顯示總額 */}
+          <div style={{ fontWeight: '900', fontSize: '1.6rem' }}>
+            ${order.totalAmount}
+          </div>
+
+          {/* 右側按鈕群 */}
           <div style={{ display: 'flex', gap: '8px' }}>
+            {/* 1. 待處理狀態 */}
             {filter === '待處理' && (
+              <button className="btn-gradient" style={{ background: 'var(--warning)' }} onClick={() => updateOrder(order.id, '處理中')}>
+                接單
+              </button>
+            )}
+
+            {/* 2. 處理中狀態 */}
+            {filter === '處理中' && (
               <>
-                <button className="btn-gradient" style={{ background: 'var(--warning)', minWidth: '85px', border: 'none', padding: '10px', borderRadius: '8px', color: '#fff', cursor: 'pointer' }} onClick={() => updateOrder(order.id, '處理中')}>接單</button>
-                <button className="btn-gradient" style={{ background: 'var(--danger)', border: 'none', padding: '10px', borderRadius: '8px', color: '#fff', cursor: 'pointer' }} onClick={() => removeOrder(order.id)}>刪除</button>
+                <button className="btn-gradient" style={{ background: '#8c8c8c' }} onClick={() => updateOrder(order.id, '待處理')}>
+                  退回
+                </button>
+                <button className="btn-gradient" style={{ background: 'var(--success)' }} onClick={() => updateOrder(order.id, '已完成')}>
+                  完成
+                </button>
               </>
             )}
-            {filter === '處理中' && (
-              <button className="btn-gradient" style={{ background: 'var(--success)', minWidth: '85px', border: 'none', padding: '10px', borderRadius: '8px', color: '#fff', cursor: 'pointer' }} onClick={() => updateOrder(order.id, '已完成')}>完成</button>
-            )}
+
+            {/* 3. 已完成狀態 */}
             {filter === '已完成' && (
-              <button className="btn-gradient" style={{ background: 'var(--primary)', minWidth: '85px', border: 'none', padding: '10px', borderRadius: '8px', color: '#fff', cursor: 'pointer' }} onClick={() => updateOrder(order.id, '歸檔')}>歸檔</button>
+              <>
+                <button className="btn-gradient" style={{ background: '#8c8c8c' }} onClick={() => updateOrder(order.id, '處理中')}>
+                  退回
+                </button>
+                <button className="btn-gradient" style={{ background: 'var(--primary)', color: 'white' }} onClick={() => updateOrder(order.id, '歸檔')}>
+                  歸檔
+                </button>
+              </>
             )}
+            {/* 4. 歸檔狀態 */}
+            {filter === '歸檔' && (
+                <button
+    className="btn-gradient"
+    style={{ background: '#8c8c8c' }}
+    onClick={() => updateOrder(order.id, '已完成')}
+  >
+    退回
+  </button>
+)}
+
+            {/* 4. 通用刪除按鈕 (每個狀態都會顯示) */}
+            <button className="btn-gradient" style={{ background: 'var(--danger)' }} onClick={() => removeOrder(order.id)}>
+              刪除
+            </button>
           </div>
-        )}
-      </div>
-    </div>
+        </div>
+      )}
+    </div> // 這是對應 OrderCard 最外層的 div
   );
 }
+
 // --- 2. 訂單監控主頁面 ---
 function OrdersView({ orders }) {
   const [filter, setFilter] = useState('待處理');
